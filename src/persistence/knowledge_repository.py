@@ -17,7 +17,7 @@ def register_note(connection, document_id, note, markdown_path):
 
 
 def load_notes(document_id=None, course=None):
-    query = """SELECT knowledge_notes.*, documents.course FROM knowledge_notes
+    query = """SELECT knowledge_notes.*, documents.course, documents.filename AS source_file FROM knowledge_notes
                JOIN documents ON documents.id = knowledge_notes.document_id"""
     conditions, parameters = [], []
     if document_id is not None:

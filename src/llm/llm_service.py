@@ -6,6 +6,7 @@ from src.llm.base_provider import LLMError
 from src.llm.config import load_config
 from src.llm.openai_provider import OpenAIProvider
 from src.llm.gemini_provider import GeminiProvider
+from src.llm.usage import record_service_usage
 
 
 class ConnectionResult(BaseModel):
@@ -22,10 +23,13 @@ class LLMService:
         providers = {"openai": OpenAIProvider, "gemini": GeminiProvider}
         if config.provider not in providers:
             raise LLMError("Unbekannter KI-Anbieter.")
+        self.config = config
         self.provider = providers[config.provider](config)
 
     def generate(self, prompt, response_model):
-        return self.provider.generate(prompt, response_model)
+        result = self.provider.generate(prompt, response_model)
+        record_service_usage(self.config, getattr(self.provider, "last_usage", None), response_model)
+        return result
 
     def test_connection(self):
         result = self.generate("Verbindungstest: Gib ok als true zurück.", ConnectionResult)

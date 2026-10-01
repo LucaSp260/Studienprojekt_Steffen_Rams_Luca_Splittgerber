@@ -4,6 +4,8 @@ import openai
 from google import genai
 from google.genai import types
 
+from src.llm.usage import record_usage
+
 
 class EmbeddingError(Exception):
     """Sichere Fehlermeldung ohne Schlüssel oder rohe API-Antwort."""
@@ -18,6 +20,8 @@ def openai_embeddings(texts, config, is_query=False):
         items = sorted(response.data, key=lambda item: item.index)
         if [item.index for item in items] != list(range(len(texts))):
             raise EmbeddingError("OpenAI lieferte unvollständige Embeddings.")
+        record_usage(config, getattr(response, "usage", None),
+                     "embedding_query" if is_query else "embedding_documents")
         return [item.embedding for item in items]
     except openai.AuthenticationError:
         raise EmbeddingError("OpenAI-API-Key ungültig. Bitte Einstellungen prüfen.") from None
@@ -47,6 +51,9 @@ def gemini_embeddings(texts, config, is_query=False):
             )
         if not response.embeddings:
             raise EmbeddingError("Gemini lieferte keine Embeddings.")
+        record_usage(config, getattr(response, "usage", None) or
+                     getattr(response, "usage_metadata", None),
+                     "embedding_query" if is_query else "embedding_documents")
         return [item.values for item in response.embeddings]
     except EmbeddingError:
         raise

@@ -9,6 +9,7 @@ from src.knowledge_layer.markdown_store import load_note
 from src.llm.base_provider import LLMError
 from src.persistence.document_repository import load_documents
 from src.persistence.knowledge_repository import load_notes
+from src.persistence.brain_repository import pending_brain_notes
 from src.ui.search import show_search
 from src.knowledge_layer.embedding_service import EmbeddingError
 from src.knowledge_layer.vector_store import SearchError
@@ -52,6 +53,15 @@ def show_knowledge_page():
             for document in processed:
                 st.text(f"{document['filename']} – {document['course']}")
                 st.caption('Dieses Dokument wurde bereits in die Wissensbasis verarbeitet.')
+                if pending_brain_notes(document['id']):
+                    st.warning('Die Knowledge Notes sind indexiert; die automatische Ergänzung des Second Brains steht noch aus.')
+                    if st.button('Second Brain erneut ergänzen', key=f"retry_brain_{document['id']}"):
+                        try:
+                            result = process_document(document['id'])
+                            st.success(result['message'])
+                            st.rerun()
+                        except (ValueError, LLMError, EmbeddingError, SearchError, sqlite3.Error, OSError) as error:
+                            st.error(str(error) or 'Das Second Brain konnte nicht ergänzt werden.')
     st.subheader('Meine Wissensbasis')
     notes = load_notes()
     if not notes:

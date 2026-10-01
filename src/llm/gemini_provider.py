@@ -13,6 +13,7 @@ class GeminiProvider(BaseProvider):
         self.config = config
 
     def generate(self, prompt, response_model):
+        self.last_usage = None
         try:
             with genai.Client(
                 api_key=self.config.api_key,
@@ -32,6 +33,7 @@ class GeminiProvider(BaseProvider):
                 )
             if response.status != "completed" or not response.output_text:
                 raise LLMError("Gemini lieferte keine vollständige strukturierte Antwort.")
+            self.last_usage = getattr(response, "usage", None) or getattr(response, "usage_metadata", None)
             return response_model.model_validate_json(response.output_text)
         except LLMError:
             raise

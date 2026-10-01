@@ -6,19 +6,22 @@ Lokales MVP eines universitären Studienprojekts: Der AI Learning Companion mach
 
 ```mermaid
 flowchart LR
-    D[Data Layer: Original-PDFs] --> K[Knowledge Base Layer: Markdown + YAML und ChromaDB]
+    D[Data Layer: Original-PDFs] --> K[Knowledge Base Layer: Notes + ChromaDB]
+    K --> C[Connection Agent: Konzept- und Beziehungsvorschläge]
+    C --> H[Menschliche Prüfung]
+    H --> G[Bestätigter Wissensgraph + Obsidian]
     K --> A[Agentic Layer: Lernchat, Exercise, Exam und Critic]
 ```
 
 - **Data Layer** (`src/data_layer`, `user_data`): PDFs speichern, SHA-256-Duplikate erkennen und Text mit PyMuPDF lesen.
 - **Knowledge Base Layer** (`src/knowledge_layer`, `knowledge_base`): Inhalte thematisch extrahieren und als Markdown-Notes mit YAML-Metadaten speichern und semantisch durchsuchen.
-- **Agentic Reasoning / Analytics Layer** (`src/agent_layer`): Lernchat, Exercise, Exam und Critic Agent greifen ausschließlich über Retrieval und `LLMService` auf Wissen und Modelle zu.
+- **Agentic Reasoning / Analytics Layer** (`src/agent_layer`): Lernchat, Exercise, Exam, Critic und Connection Agent greifen über Retrieval beziehungsweise belegte Notes und `LLMService` auf Wissen und Modelle zu.
 
-SQLite (`src/persistence`) ist ausschließlich technische Persistenz für Chats, Dokumente und die Übersicht der Notes, kein vierter fachlicher Layer. `src/llm` kapselt beide Anbieter hinter `LLMService`. Markdown bleibt die eigentliche Wissensrepräsentation.
+SQLite (`src/persistence`) speichert Chats, Dokumente, Notes-Übersicht sowie den bestätigten Second-Brain-Graph und die Review-Historie. `src/llm` kapselt beide Anbieter hinter `LLMService`. Markdown bleibt die Wissensrepräsentation der Notes; der kuratierte Graph wird zusätzlich als Obsidian-kompatible Markdown-Dateien exportiert.
 
 ## Voraussetzungen, Installation und Start
 
-Benötigt werden Windows, Python 3.10 oder neuer mit pip (empfohlen: Python 3.12) und ein API-Key für OpenAI oder Google Gemini. Das Repository über GitHub herunterladen oder mit `git clone https://github.com/LucaSp260/Studienprojekt_Steffen_Luca.git` klonen. Anschließend unter Windows zuerst `setup.bat`, danach `start.bat` doppelt anklicken. Das Setup prüft Python, erstellt `.venv`, installiert alle Abhängigkeiten und initialisiert die lokalen Ordner sowie SQLite. Bereits eingerichtete Umgebungen lassen sich durch erneutes Ausführen von `setup.bat` aktualisieren. Falls der Browser nicht öffnet: http://localhost:8501. Zum Beenden im Terminal Strg+C drücken.
+Benötigt werden Windows, Python 3.10 oder neuer mit pip (empfohlen: Python 3.12) und ein API-Key für OpenAI oder Google Gemini. Das Repository über GitHub herunterladen oder mit `git clone --branch Neuste_Version_01_10 https://github.com/LucaSp260/Studienprojekt_Steffen_Luca.git` klonen. Anschließend unter Windows zuerst `setup.bat`, danach `start.bat` doppelt anklicken. Das Setup prüft Python, erstellt `.venv`, installiert alle Abhängigkeiten und initialisiert die lokalen Ordner sowie SQLite. Bereits eingerichtete Umgebungen lassen sich durch erneutes Ausführen von `setup.bat` aktualisieren. Falls der Browser nicht öffnet: http://localhost:8501. Zum Beenden im Terminal Strg+C drücken.
 
 Ein eigener Python-Pfad kann mit `setup.bat "C:\Pfad\zu\python.exe"` gewählt werden. Die vorhandene `.venv` verwendet Python 3.12 aus der lokalen Codex-Runtime; nach deren Entfernung die Umgebung mit einer eigenen Python-Installation neu einrichten.
 
@@ -30,6 +33,20 @@ Ein eigener Python-Pfad kann mit `setup.bat "C:\Pfad\zu\python.exe"` gewählt we
 4. Danach ein Thema öffnen: Inhalt, Tags, Schwierigkeit, Originaldatei und Quellseiten werden ohne YAML-Syntax angezeigt.
 
 Bei der Verarbeitung wird der extrahierte PDF-Text an den gewählten Anbieter gesendet. API-Aufrufe können Kosten verursachen. Sie erfolgen ausschließlich beim Verbindungstest oder durch eine ausdrücklich ausgelöste Verarbeitung, Indexierung, Suche, Lernfrage oder Generierung. Navigation, das Öffnen alter Chats und normale Streamlit-Neuläufe senden keine Anfrage. Bereits verarbeitete PDFs werden nicht erneut verarbeitet; Reprocessing ist nicht enthalten.
+
+## Second Brain und Wissensatlas
+
+1. Verarbeite zuerst PDF-Unterlagen zu Knowledge Notes.
+2. Nach erfolgreicher Indexierung erweitert die App den Atlas automatisch: Neue Notes werden miteinander und mit höchstens fünf semantisch relevanten alten Notes je neuer Note verglichen. Insgesamt gelangen höchstens zwölf alte Notes in den Connection-Agent-Kontext. Bestehende Konzepte und Beziehungen werden nicht neu erzeugt. Dieser Schritt kann zusätzliche API-Kosten verursachen.
+3. Öffne **Second Brain**. Die Gesamtansicht zeigt alle Konzepte und Beziehungen ohne Kantenlabels; ein Schalter blendet sie ein. Die Fokusansicht zeigt ein auswählbares Konzept und seine Nachbarn über einen oder zwei Hops mit direkt sichtbaren Beziehungskategorien. Hover/Klick zeigt Begründung, Belege, Herkunft und Review-Status.
+4. Automatisch ergänzte Beziehungen sind **KI-generiert** und sofort sichtbar. Bestehende übernommene und manuelle Beziehungen bleiben **Nutzerbestätigt**. Beziehungen lassen sich später bearbeiten oder löschen; das Speichern einer Bearbeitung bestätigt die betreffende KI-Kante. Der bisherige Button **Verbindungen mit dem Agenten vorschlagen** bleibt für eine bewusst manuell ausgelöste Analyse mit anschließender Vorschlagsprüfung verfügbar.
+5. Unter **In Obsidian öffnen → Obsidian-Export aktualisieren** entsteht ein kursbezogener Vault unter `knowledge_base/Second Brain/`. Exportierte Beziehungen tragen ihren Status im Markdown. Öffne den angezeigten Ordner in Obsidian als Vault und nutze **Graph View**.
+
+Obsidian ist eine Visualisierung und externe Lesekopie. Die App bleibt die führende Wissensbasis. Offene und abgelehnte Vorschläge werden nicht als Verbindungen exportiert. Änderungen in Obsidian werden nicht in die App zurückimportiert.
+
+Der Streamlit-Atlas zeigt zunächst ein Konzept und seine direkten Nachbarn. Über **Graph-Fokus** kann ein anderes Konzept oder der gesamte Atlas gewählt werden. Mausrad und Schaltflächen zoomen; Ziehen verschiebt den Graphen oder einzelne Knoten. Hover und Klick zeigen Quellen, Beschreibung und Begründung. **Beleg-Notes im Graphen anzeigen** ergänzt orange Note-Knoten zu den blauen Konzepten. Frühere Beziehungen behalten ihren ursprünglichen Typ; ihre bisherige Begründung steht zusätzlich als Beschreibung bereit, bis sie fachlich präzisiert werden.
+
+Die Review-Historie vergleicht den ursprünglichen Agentenvorschlag mit der übernommenen Fassung und zählt unveränderte Übernahmen, Anpassungen und Ablehnungen. Diese Kennzahlen zeigen menschliche Korrekturarbeit, aber ohne fachlich gelabelten Referenzdatensatz keine objektive Wahrheitsquote.
 
 ## Anbieter und lokale Einstellungen
 
@@ -47,6 +64,7 @@ Die Implementierung folgt den offiziellen SDKs und Dokumentationen: [OpenAI Stru
 - Python prüft Pflichtfelder, Schwierigkeit, Tags und Seitenzahlen. Quellseiten müssen im jeweiligen Textabschnitt liegen. Kurs und Originaldateiname werden aus SQLite übernommen. Fachliche Richtigkeit und die genaue inhaltliche Zuordnung sollten anhand der angegebenen Quelle geprüft werden.
 - Notes liegen in `knowledge_base/<kurs>/*.md`, mit Titel, Kurs, Thema, Tags, Schwierigkeit, Quelle, Seiten und verwandten Themen im YAML-Frontmatter. SQLite registriert sie in `knowledge_notes` mit Dokumentbezug und relativem Markdown-Pfad.
 - Für neue Dokumente wird `documents.processed = 1` erst nach Markdown, SQLite und erfolgreicher Indexierung gesetzt. Schreibfehler vor dem SQLite-Commit werden zurückgenommen. Bei späteren Embedding-/Chroma-Fehlern bleiben die Notes erhalten, das Dokument bleibt unverarbeitet. Der nächste Versuch indexiert die vorhandenen Notes ohne erneute Knowledge Extraction. PDFs ohne Text können gespeichert, aber ohne OCR nicht in Notes umgewandelt werden.
+- `brain_note_processing` merkt sich abgeschlossene Connection-Analysen. Bei der einmaligen Migration werden vorhandene Notes als Bestand markiert, damit sie nicht nachträglich kostenpflichtig analysiert werden. Scheitert nur der Connection-Schritt, bleiben die indexierten Notes erhalten und er kann unter **Bereits verarbeitete Dokumente** ohne neue Extraction erneut gestartet werden. `brain_edges.review_status` unterscheidet KI-generierte von nutzerbestätigten Beziehungen; `llm_usage` speichert Anbieter, Modell, Operation, Zeitpunkt und nur tatsächlich gelieferte Tokenwerte.
 
 Datenbank und fehlende Tabellen werden beim Start automatisch angelegt, bestehende Daten bleiben erhalten. PDFs, Chats und Notes überstehen normale Neustarts. Die Anwendung ist für eine lokale Streamlit-Instanz vorgesehen; eine Verarbeitungssperre schützt vor gleichzeitigen Klicks in deren Browsersitzungen. Ein harter Prozessabbruch während des Schreibens kann unregistrierte Markdown-Dateien zurücklassen; bestehende Dateien werden auch dann nicht überschrieben. Zeitstempel in SQLite sind UTC.
 

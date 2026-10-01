@@ -36,7 +36,9 @@ class FoundationTests(unittest.TestCase):
         try:
             tables = {r[0] for r in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
             self.assertEqual(tables, {
-                'chats', 'messages', 'documents', 'exams', 'knowledge_notes', 'generated_artifacts'
+                'chats', 'messages', 'documents', 'exams', 'knowledge_notes', 'generated_artifacts',
+                'brain_concepts', 'brain_edges', 'brain_concept_sources', 'brain_edge_sources',
+                'brain_proposals', 'brain_note_processing', 'llm_usage',
             })
             self.assertEqual(connection.execute('PRAGMA foreign_keys').fetchone()[0], 1)
             with self.assertRaises(sqlite3.IntegrityError):

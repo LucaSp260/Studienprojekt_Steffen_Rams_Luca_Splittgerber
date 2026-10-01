@@ -10,6 +10,7 @@ from src.persistence.database import (
 from src.ui.documents import show_documents_page
 from src.ui.settings import show_settings_page
 from src.ui.knowledge import show_knowledge_page
+from src.ui.brain import show_brain_page
 from src.ui.learning import show_learning_page
 
 st.set_page_config(page_title="AI Learning Companion", page_icon="📚")
@@ -35,7 +36,7 @@ def main():
                          use_container_width=True):
                 st.session_state.chat_id = chat["id"]
                 st.rerun()
-        page = st.radio("Navigation", ["Lernen", "Unterlagen", "Wissensbasis", "Einstellungen"])
+        page = st.radio("Navigation", ["Lernen", "Unterlagen", "Wissensbasis", "Second Brain", "Einstellungen"])
 
     st.title("AI Learning Companion")
     st.write("Persönliche KI-Lernumgebung auf Basis deiner Studienunterlagen.")
@@ -47,6 +48,9 @@ def main():
         return
     if page == "Wissensbasis":
         show_knowledge_page()
+        return
+    if page == "Second Brain":
+        show_brain_page()
         return
 
     show_learning_page(st.session_state.chat_id)

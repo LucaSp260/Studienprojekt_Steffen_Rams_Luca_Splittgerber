@@ -20,3 +20,11 @@ tmp/
 .coverage
 htmlcov/
 *.log
+
+# Additional local database formats and backups
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+*.bak
+*.backup

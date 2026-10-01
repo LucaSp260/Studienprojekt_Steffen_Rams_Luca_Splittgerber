@@ -19,6 +19,9 @@ def initialize_database():
     connection = get_connection()
     try:
         with connection:
+            had_brain_processing = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='brain_note_processing'"
+            ).fetchone() is not None
             connection.executescript("""
                 CREATE TABLE IF NOT EXISTS chats (
                     id INTEGER PRIMARY KEY,
@@ -69,13 +72,111 @@ def initialize_database():
                     content_json TEXT NOT NULL,
                     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 );
+                CREATE TABLE IF NOT EXISTS brain_concepts (
+                    id INTEGER PRIMARY KEY,
+                    course TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    name_key TEXT NOT NULL,
+                    description TEXT NOT NULL DEFAULT '',
+                    origin TEXT NOT NULL CHECK(origin IN ('agent', 'manual')),
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(course, name_key)
+                );
+                CREATE TABLE IF NOT EXISTS brain_edges (
+                    id INTEGER PRIMARY KEY,
+                    source_concept_id INTEGER NOT NULL REFERENCES brain_concepts(id) ON DELETE CASCADE,
+                    target_concept_id INTEGER NOT NULL REFERENCES brain_concepts(id) ON DELETE CASCADE,
+                    relation_type TEXT NOT NULL,
+                    rationale TEXT NOT NULL DEFAULT '',
+                    origin TEXT NOT NULL CHECK(origin IN ('agent', 'manual')),
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(source_concept_id, target_concept_id, relation_type),
+                    CHECK(source_concept_id != target_concept_id)
+                );
+                CREATE TABLE IF NOT EXISTS brain_concept_sources (
+                    concept_id INTEGER NOT NULL REFERENCES brain_concepts(id) ON DELETE CASCADE,
+                    note_id INTEGER NOT NULL REFERENCES knowledge_notes(id) ON DELETE CASCADE,
+                    PRIMARY KEY(concept_id, note_id)
+                );
+                CREATE TABLE IF NOT EXISTS brain_edge_sources (
+                    edge_id INTEGER NOT NULL REFERENCES brain_edges(id) ON DELETE CASCADE,
+                    note_id INTEGER NOT NULL REFERENCES knowledge_notes(id) ON DELETE CASCADE,
+                    PRIMARY KEY(edge_id, note_id)
+                );
+                CREATE TABLE IF NOT EXISTS brain_proposals (
+                    id INTEGER PRIMARY KEY,
+                    course TEXT NOT NULL,
+                    proposal_type TEXT NOT NULL CHECK(proposal_type IN ('concept', 'connection')),
+                    fingerprint TEXT NOT NULL UNIQUE,
+                    payload_json TEXT NOT NULL,
+                    original_payload_json TEXT,
+                    reviewed_payload_json TEXT,
+                    review_outcome TEXT CHECK(review_outcome IN ('accepted', 'edited', 'rejected')),
+                    status TEXT NOT NULL DEFAULT 'pending'
+                        CHECK(status IN ('pending', 'accepted', 'rejected')),
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE TABLE IF NOT EXISTS brain_note_processing (
+                    note_id INTEGER PRIMARY KEY REFERENCES knowledge_notes(id) ON DELETE CASCADE,
+                    processing_version INTEGER NOT NULL,
+                    status TEXT NOT NULL CHECK(status IN ('baseline', 'completed')),
+                    processed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE TABLE IF NOT EXISTS llm_usage (
+                    id INTEGER PRIMARY KEY,
+                    operation TEXT NOT NULL,
+                    provider TEXT NOT NULL,
+                    model TEXT NOT NULL,
+                    input_tokens INTEGER,
+                    output_tokens INTEGER,
+                    total_tokens INTEGER,
+                    document_id INTEGER,
+                    note_ids_json TEXT,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
             """)
+            if not had_brain_processing:
+                # Bestehende Notes werden bei der einmaligen Migration nicht erneut an die KI gesendet.
+                connection.execute(
+                    """INSERT INTO brain_note_processing (note_id, processing_version, status)
+                       SELECT id, 1, 'baseline' FROM knowledge_notes"""
+                )
             columns = {row["name"] for row in connection.execute("PRAGMA table_info(documents)")}
             if "page_count" not in columns:
                 connection.execute("ALTER TABLE documents ADD COLUMN page_count INTEGER")
             message_columns = {row["name"] for row in connection.execute("PRAGMA table_info(messages)")}
             if "metadata_json" not in message_columns:
                 connection.execute("ALTER TABLE messages ADD COLUMN metadata_json TEXT")
+            edge_columns = {row["name"] for row in connection.execute("PRAGMA table_info(brain_edges)")}
+            if "relation_description" not in edge_columns:
+                connection.execute(
+                    "ALTER TABLE brain_edges ADD COLUMN relation_description TEXT NOT NULL DEFAULT ''"
+                )
+                # Die bisherige Begründung enthält die einzige vorhandene fachliche Aussage.
+                # Sie bleibt erhalten und dient alten Kanten zusätzlich als Beschreibung.
+                connection.execute(
+                    "UPDATE brain_edges SET relation_description = rationale WHERE rationale != ''"
+                )
+            if "review_status" not in edge_columns:
+                connection.execute(
+                    "ALTER TABLE brain_edges ADD COLUMN review_status TEXT NOT NULL DEFAULT 'user_confirmed'"
+                )
+            if "generation_source" not in edge_columns:
+                connection.execute("ALTER TABLE brain_edges ADD COLUMN generation_source TEXT")
+            proposal_columns = {row["name"] for row in connection.execute("PRAGMA table_info(brain_proposals)")}
+            for name, definition in (
+                ("original_payload_json", "TEXT"),
+                ("reviewed_payload_json", "TEXT"),
+                ("review_outcome", "TEXT"),
+            ):
+                if name not in proposal_columns:
+                    connection.execute(f"ALTER TABLE brain_proposals ADD COLUMN {name} {definition}")
+            connection.execute(
+                "UPDATE brain_proposals SET original_payload_json = payload_json WHERE original_payload_json IS NULL"
+            )
             connection.execute(
                 "CREATE INDEX IF NOT EXISTS idx_documents_hash ON documents(file_hash)"
             )

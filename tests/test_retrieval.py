@@ -226,7 +226,9 @@ class RetrievalTests(unittest.TestCase):
             knowledge_manager.process_document(result['document_id'], llm, embedding_service=failing)
         self.assertEqual(len(load_notes(document_id=result['document_id'])),1)
         self.assertFalse(next(row for row in load_documents() if row['id']==result['document_id'])['processed'])
-        knowledge_manager.process_document(result['document_id'], llm, embedding_service=self.embeddings)
+        with patch.object(knowledge_manager, 'extend_brain',
+                          return_value={'concepts': 0, 'edges': 0, 'processed_notes': 1}):
+            knowledge_manager.process_document(result['document_id'], llm, embedding_service=self.embeddings)
         llm.generate.assert_called_once()
         self.assertTrue(next(row for row in load_documents() if row['id']==result['document_id'])['processed'])
         with VectorStore(self.embeddings.config) as store:

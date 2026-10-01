@@ -45,3 +45,21 @@ def extract_page_texts(source):
 
 def extract_text(source):
     return read_pdf(source)["text"]
+
+
+def render_pdf_page(source, page_number, dpi=120):
+    """Rendert eine 1-basierte PDF-Seite als PNG zur Anzeige in der App."""
+    if type(page_number) is not int or page_number < 1:
+        raise ValueError("Die Seitennummer muss positiv sein.")
+    try:
+        content = source if isinstance(source, bytes) else Path(source).read_bytes()
+        with pymupdf.open(stream=content, filetype="pdf") as document:
+            if document.needs_pass:
+                raise ValueError("Die PDF ist passwortgeschützt und kann nicht angezeigt werden.")
+            if page_number > document.page_count:
+                raise ValueError("Die angeforderte Seite existiert nicht in der PDF.")
+            page = document.load_page(page_number - 1)
+            pixmap = page.get_pixmap(matrix=pymupdf.Matrix(dpi / 72, dpi / 72), alpha=False)
+            return pixmap.tobytes("png")
+    except (OSError, RuntimeError, pymupdf.FileDataError) as error:
+        raise ValueError("Die PDF-Seite konnte nicht gerendert werden.") from error

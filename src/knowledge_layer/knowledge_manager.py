@@ -12,6 +12,7 @@ from src.persistence.database import get_connection
 from src.persistence.knowledge_repository import register_note
 from src.persistence.knowledge_repository import load_notes
 from src.knowledge_layer.indexing_service import index_existing_notes
+from src.knowledge_layer.brain_growth import extend_brain
 
 PROJECT_PATH = Path(__file__).resolve().parents[2]
 _processing_lock = Lock()
@@ -30,10 +31,16 @@ def process_document(document_id, llm_service=None, progress=None, embedding_ser
         if document is None:
             raise ValueError("Das Dokument wurde nicht gefunden.")
         if document["processed"]:
+            result = extend_brain(document_id, llm_service=llm_service, progress=progress)
+            if result["processed_notes"]:
+                return {"status": "success", "message":
+                        f"Second Brain wurde um {result['concepts']} Konzepte und {result['edges']} Beziehungen ergänzt."}
             return {"status": "already_processed", "message": "Dieses Dokument wurde bereits in die Wissensbasis verarbeitet."}
         if load_notes(document_id=document_id):
             index_existing_notes(document_id, embedding_service=embedding_service, progress=progress)
-            return {"status": "success", "message": "Vorhandene Knowledge Notes wurden für die Suche indexiert."}
+            growth = extend_brain(document_id, llm_service=llm_service, progress=progress)
+            return {"status": "success", "message":
+                    f"Vorhandene Knowledge Notes wurden indexiert; {growth['edges']} neue Beziehungen ergänzt."}
         source_path = (PROJECT_PATH / document["file_path"]).resolve()
         if not source_path.is_relative_to((PROJECT_PATH / "user_data").resolve()):
             raise ValueError("Die PDF liegt nicht im Unterlagen-Ordner.")
@@ -58,7 +65,10 @@ def process_document(document_id, llm_service=None, progress=None, embedding_ser
                 register_note(connection, document_id, note, relative_path)
         notes_committed = True
         index_existing_notes(document_id, embedding_service=embedding_service, progress=progress)
-        return {"status": "success", "message": f"{len(notes)} neue Themen wurden erkannt. Die Wissensbasis ist bereit."}
+        growth = extend_brain(document_id, llm_service=service, progress=progress)
+        return {"status": "success", "message":
+                f"{len(notes)} neue Themen wurden erkannt. Das Second Brain erhielt "
+                f"{growth['concepts']} Konzepte und {growth['edges']} Beziehungen."}
     except Exception:
         if notes_committed:
             # Embedding-/Chroma-Fehler: Notes behalten und beim nächsten Klick

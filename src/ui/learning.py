@@ -1,6 +1,8 @@
 """Lernseite für Chat, explizite Agent-Läufe und gespeicherte Artefakte."""
 
 import sqlite3
+from contextlib import closing
+from pathlib import Path
 
 import streamlit as st
 
@@ -8,11 +10,13 @@ from src.agent_layer.exam_agent import create_exam
 from src.agent_layer.exercise_agent import create_exercises
 from src.agent_layer.learning_chat import answer_question
 from src.agent_layer.models import AgentError, ExamRequest, ExerciseRequest
+from src.data_layer.pdf_loader import render_pdf_page
 from src.knowledge_layer.embedding_service import EmbeddingError
+from src.knowledge_layer.markdown_store import load_note
 from src.knowledge_layer.vector_store import SearchError
 from src.llm.base_provider import LLMError
 from src.persistence.artifact_repository import load_artifact, load_artifacts
-from src.persistence.database import load_messages, message_metadata, save_chat_exchange
+from src.persistence.database import get_connection, load_messages, message_metadata, save_chat_exchange
 from src.persistence.knowledge_repository import load_notes
 
 DIFFICULTIES = ["leicht", "mittel", "schwer", "gemischt"]
@@ -66,7 +70,49 @@ def _render_chat_sources(sources):
     st.caption("Quellen:")
     for source in sources:
         pages = ", ".join(str(page) for page in source.get("source_pages", []))
-        st.caption(f"- {source.get('source_file', 'Unbekannte Quelle')} · Seiten {pages}")
+        label = f"{source.get('source_file', 'Unbekannte Quelle')} · Seiten {pages}"
+        with st.expander(label):
+            try:
+                details = _load_chat_source(source["knowledge_note_id"])
+                st.markdown(f"**Knowledge Note: {details['title']}**")
+                st.caption("Zusammengefasster Kontext, den der Chat erhalten hat")
+                st.text(details["note_text"])
+                st.markdown("**Originalfolie aus der PDF**")
+                st.caption("Angezeigt werden die in der Knowledge Note referenzierten Seiten. Eine einzelne Textstelle ist nicht automatisch markiert.")
+                for page_number in source.get("source_pages", []):
+                    st.image(
+                        _render_source_pdf_page(details["pdf_path"], details["modified_ns"], page_number),
+                        caption=f"PDF-Seite {page_number}", use_container_width=True,
+                    )
+            except (KeyError, OSError, ValueError, sqlite3.Error):
+                st.warning("Die Quelle ist gespeichert, aber die Knowledge Note oder PDF-Fundstelle kann gerade nicht gelesen werden.")
+
+
+def _load_chat_source(note_id):
+    with closing(get_connection()) as connection:
+        row = connection.execute(
+            """SELECT n.title, n.markdown_path, d.file_path
+               FROM knowledge_notes n JOIN documents d ON d.id = n.document_id
+               WHERE n.id = ?""", (note_id,)
+        ).fetchone()
+    if row is None:
+        raise ValueError("Die Knowledge Note wurde nicht gefunden.")
+    _, note_text = load_note(row["markdown_path"])
+    project_path = Path(__file__).resolve().parents[2]
+    pdf_path = (project_path / row["file_path"]).resolve()
+    if not pdf_path.is_relative_to((project_path / "user_data").resolve()):
+        raise ValueError("Die PDF-Quelle liegt nicht im Unterlagen-Ordner.")
+    if not pdf_path.is_file():
+        raise OSError("Die PDF-Quelle fehlt.")
+    return {"title": row["title"], "note_text": note_text, "pdf_path": str(pdf_path),
+            "modified_ns": pdf_path.stat().st_mtime_ns}
+
+
+@st.cache_data(show_spinner=False, max_entries=32)
+def _render_source_pdf_page(pdf_path, modified_ns, page_number):
+    # Cache key includes the file modification time and page number.
+    del modified_ns
+    return render_pdf_page(pdf_path, page_number)
 
 
 def _courses():

@@ -44,7 +44,8 @@ class KnowledgeTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
-        self.patches = [patch.object(manager, 'index_existing_notes', side_effect=lambda document_id, **kwargs: self.mark_processed(document_id)), patch.object(db, 'DATABASE_PATH', self.root / 'data/application.db'),
+        self.patches = [patch.object(manager, 'extend_brain', return_value={'concepts': 0, 'edges': 0, 'processed_notes': 0}),
+                        patch.object(manager, 'index_existing_notes', side_effect=lambda document_id, **kwargs: self.mark_processed(document_id)), patch.object(db, 'DATABASE_PATH', self.root / 'data/application.db'),
                         patch.object(document_manager, 'USER_DATA_PATH', self.root / 'user_data'),
                         patch.object(manager, 'PROJECT_PATH', self.root),
                         patch.object(markdown_store, 'KNOWLEDGE_BASE_PATH', self.root / 'knowledge_base'),

@@ -11,6 +11,7 @@ class OpenAIProvider(BaseProvider):
         self.config = config
 
     def generate(self, prompt, response_model):
+        self.last_usage = None
         try:
             with openai.OpenAI(api_key=self.config.api_key, timeout=90, max_retries=0) as client:
                 response = client.responses.parse(
@@ -23,6 +24,7 @@ class OpenAIProvider(BaseProvider):
                 )
             if response.status != "completed" or response.output_parsed is None:
                 raise LLMError("OpenAI lieferte keine vollständige strukturierte Antwort.")
+            self.last_usage = getattr(response, "usage", None)
             return response.output_parsed
         except openai.AuthenticationError:
             raise LLMError("Der OpenAI-API-Key ist ungültig. Bitte Einstellungen prüfen.") from None
