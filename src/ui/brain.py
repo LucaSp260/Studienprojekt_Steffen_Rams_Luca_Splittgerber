@@ -1,348 +1,135 @@
-"""Second Brain: belegte KI-Vorschläge kuratieren und als Wissensatlas ansehen."""
-
+"""Wissensatlas: explore and edit persisted graph entries without model calls."""
 import json
 import sqlite3
-
 import streamlit as st
-
-from src.agent_layer.connection_agent import (
-    AGENT_RELATION_TYPES, RELATION_TYPES, ConceptProposal, ConnectionProposal, propose_connections,
-)
-from src.knowledge_layer.obsidian_export import export_course_to_obsidian, validate_obsidian_export
-from src.llm.base_provider import LLMError
-from src.persistence.brain_repository import (
-    accept_proposal, accept_proposals, add_manual_concept, add_manual_edge, delete_concept, delete_edge,
-    load_graph, load_proposals, merge_concepts, reject_proposal, save_concept, save_edge,
-    save_proposals, review_stats,
-)
-from src.persistence.database import get_connection
+from src.agent_layer.connection_agent import RELATION_TYPES
+from src.knowledge_layer.obsidian_export import export_course_to_obsidian
+from src.persistence.brain_repository import load_graph, save_concept, delete_concept, save_edge, delete_edge
+from src.persistence.course_repository import list_courses
 from src.persistence.knowledge_repository import load_notes
+from src.ui.atlas_component import atlas_graph
 from src.ui.brain_graph import build_graph_html, focus_subgraph
+from src.ui.concept_details import concept_summary
+from src.ui.learning import _render_chat_sources
 
+def _ids(row):
+    return [int(value) for value in (row["note_ids"] or "").split(",") if value.isdigit()]
 
-def _courses(notes):
-    values = {row["course"] for row in notes}
-    connection = get_connection()
-    try:
-        values.update(row[0] or None for row in connection.execute("SELECT DISTINCT course FROM brain_concepts"))
-        values.update(row[0] or None for row in connection.execute("SELECT DISTINCT course FROM brain_proposals"))
-    finally:
-        connection.close()
-    return sorted(values, key=lambda value: (value is not None, (value or "").casefold()))
-
-
-def _note_labels(notes):
-    labels = {}
-    for row in notes:
-        pages = json.loads(row["source_pages"])
-        page_text = ", ".join(str(value) for value in pages)
-        labels[int(row["id"])] = f"#{row['id']} · {row['title']} · {row['course'] or 'Ohne Kurs'} · S. {page_text}"
-    return labels
+def _concept_sources(concept, notes):
+    selected_ids = set(_ids(concept))
+    documents = {}
+    for note in notes:
+        if note["id"] not in selected_ids:
+            continue
+        source = documents.setdefault(note["document_id"], {
+            "knowledge_note_id": note["id"], "source_file": note["source_file"],
+            "source_pages": [], "note_titles": [],
+        })
+        pages = json.loads(note["source_pages"])
+        source["source_pages"] = sorted(set(source["source_pages"]) | set(pages))
+        source["note_titles"].append(note["title"])
+    return list(documents.values())
 
 
 def show_brain_page():
-    st.subheader("Second Brain")
-    st.caption("Ein Wissensatlas aus belegten Konzepten und Beziehungen. KI-generierte Kanten sind als solche gekennzeichnet.")
-    notes = load_notes()
-    courses = _courses(notes)
+    courses = list_courses()
     if not courses:
-        st.info("Lade zuerst Unterlagen hoch und verarbeite sie zu Knowledge Notes.")
+        st.info("Verarbeite eigene Unterlagen, um den Wissensatlas aufzubauen.")
         return
-    course = st.selectbox("Kurs", courses, format_func=lambda value: value or "Ohne Kurs", key="brain_course")
-    course_key = course or ""
-    course_notes = [row for row in notes if row["course"] == course]
-    note_labels = _note_labels(course_notes)
-
-    with st.expander("Wie entstehen Verbindungen?", expanded=False):
-        st.write("Nach der Verarbeitung eines neuen Dokuments ergänzt der Connection Agent den Atlas automatisch aus den neuen Notes und wenigen semantisch relevanten alten Notes. Diese Beziehungen erscheinen sofort mit Status KI-generiert. Das kann API-Kosten verursachen.")
-        st.write("Der optionale Button darunter startet die bisherige Analyse aller Kurs-Notes als prüfbare Vorschläge. Solche Vorschläge werden erst nach eurer Übernahme Teil des Atlas; Original und Entscheidung bleiben für die Auswertung gespeichert.")
-        st.write("Der bestätigte Atlas wird als Obsidian-kompatible Markdown-Ansicht geschrieben. Die App bleibt die Quelle für Prüfung und Bearbeitung; Obsidian zeigt den jeweils exportierten Stand.")
-
-    if st.button("Verbindungen mit dem Agenten vorschlagen", type="primary", key="brain_propose"):
-        try:
-            with st.spinner("Knowledge Notes werden nach belegten Konzepten und Beziehungen durchsucht …"):
-                proposals = propose_connections(course or "Ohne Kurs", notes=course_notes)
-                created = save_proposals(course_key, proposals)
-            st.success(f"{created} neue Vorschläge gespeichert. Bestehende und manuelle Einträge bleiben erhalten.")
-            st.rerun()
-        except (LLMError, ValueError) as error:
-            st.error(str(error))
-        except (OSError, sqlite3.Error):
-            st.error("Die Vorschläge konnten nicht gespeichert werden. Bitte Datenbank und Schreibrechte prüfen.")
-
-    pending = load_proposals(course_key, "pending")
-    stats = {row["review_outcome"]: row["amount"] for row in review_stats(course_key)}
-    if stats:
-        st.caption(f"Bisher geprüft: {stats.get('accepted', 0)} unverändert übernommen · "
-                   f"{stats.get('edited', 0)} angepasst · {stats.get('rejected', 0)} abgelehnt. "
-                   "Das sind Prüfergebnisse, keine automatische Wahrheitsquote.")
-    if pending:
-        st.markdown(f"#### Vorschläge prüfen · {len(pending)} offen")
-        st.caption("Ändere Felder direkt vor der Übernahme. Die editierte Fassung wird gespeichert und im Atlas verwendet.")
-        if st.button("Alle übernehmen", key="accept_all_brain_proposals"):
-            try:
-                batch = []
-                for proposal in pending:
-                    model = ConceptProposal if proposal["proposal_type"] == "concept" else ConnectionProposal
-                    validated = model.model_validate(proposal["payload"])
-                    if not set(validated.note_ids).issubset(note_labels):
-                        raise ValueError("Mindestens ein Beleg gehört nicht mehr zum gewählten Kurs.")
-                    batch.append((proposal["id"], validated.model_dump()))
-                accept_proposals(batch)
-                export_course_to_obsidian(course_key)
-                st.rerun()
-            except (ValueError, sqlite3.Error, OSError) as error:
-                st.error(str(error) or "Die Vorschläge konnten nicht übernommen werden.")
-        for proposal in pending:
-            payload = proposal["payload"]
-            title = (payload.get("name") if proposal["proposal_type"] == "concept"
-                     else f"{payload.get('source_concept')} → {payload.get('target_concept')}")
-            with st.expander(f"{proposal['proposal_type']}: {title} · Vorschlag #{proposal['id']}"):
-                with st.form(f"review_brain_{proposal['id']}"):
-                    if proposal["proposal_type"] == "concept":
-                        name = st.text_input("Konzept", value=payload.get("name", ""), key=f"pn_{proposal['id']}")
-                        description = st.text_area("Kurzbeschreibung", value=payload.get("description", ""), key=f"pd_{proposal['id']}")
-                        chosen_notes = st.multiselect("Belege (Knowledge Notes)", list(note_labels),
-                            default=[value for value in payload.get("note_ids", []) if value in note_labels],
-                            format_func=lambda value: note_labels[value], key=f"ps_{proposal['id']}")
-                        accepted = st.form_submit_button("Übernehmen")
-                        rejected = st.form_submit_button("Ablehnen")
-                        revised = {"name": name.strip(), "description": description.strip(), "note_ids": chosen_notes}
-                    else:
-                        source_name = st.text_input("Ausgehendes Konzept", value=payload.get("source_concept", ""), key=f"psrc_{proposal['id']}")
-                        target_name = st.text_input("Zielkonzept", value=payload.get("target_concept", ""), key=f"ptgt_{proposal['id']}")
-                        rel_options = list(AGENT_RELATION_TYPES)
-                        if payload.get("relation_type") not in rel_options:
-                            rel_options.append(payload.get("relation_type"))
-                        current_relation = payload.get("relation_type") if payload.get("relation_type") in rel_options else rel_options[0]
-                        relation = st.selectbox("Beziehung", rel_options, index=rel_options.index(current_relation),
-                            format_func=RELATION_TYPES.get, key=f"pr_{proposal['id']}")
-                        relation_description = st.text_area("Präzise Beziehungsbeschreibung",
-                            value=payload.get("relation_description") or payload.get("rationale", ""),
-                            key=f"pdesc_{proposal['id']}")
-                        rationale = st.text_area("Begründung", value=payload.get("rationale", ""), key=f"pra_{proposal['id']}")
-                        chosen_notes = st.multiselect("Belege (Knowledge Notes)", list(note_labels),
-                            default=[value for value in payload.get("note_ids", []) if value in note_labels],
-                            format_func=lambda value: note_labels[value], key=f"pe_{proposal['id']}")
-                        accepted = st.form_submit_button("Übernehmen")
-                        rejected = st.form_submit_button("Ablehnen")
-                        revised = {"source_concept": source_name.strip(), "target_concept": target_name.strip(),
-                                   "relation_type": relation, "relation_description": relation_description.strip(),
-                                   "rationale": rationale.strip(), "note_ids": chosen_notes}
-                    if accepted:
-                        try:
-                            model = ConceptProposal if proposal["proposal_type"] == "concept" else ConnectionProposal
-                            validated = model.model_validate(revised)
-                            if not set(validated.note_ids).issubset(note_labels):
-                                raise ValueError("Mindestens ein ausgewählter Beleg gehört nicht mehr zum Kurs.")
-                            accept_proposal(proposal["id"], validated.model_dump())
-                            export_course_to_obsidian(course_key)
-                            st.rerun()
-                        except (ValueError, sqlite3.Error, OSError) as error:
-                            st.error(str(error) or "Der Vorschlag konnte nicht übernommen werden.")
-                    if rejected:
-                        reject_proposal(proposal["id"])
-                        st.rerun()
-
-    reviewed_items = load_proposals(course_key, "accepted") + load_proposals(course_key, "rejected")
-    if reviewed_items:
-        with st.expander("Prüfverlauf der KI-Vorschläge"):
-            reviewed_items = sorted(reviewed_items, key=lambda value: value["id"], reverse=True)[:30]
-            selected_review = st.selectbox("Entscheidung anzeigen", range(len(reviewed_items)),
-                format_func=lambda index: (f"#{reviewed_items[index]['id']} · {reviewed_items[index]['proposal_type']} · "
-                                           f"{reviewed_items[index].get('review_outcome') or reviewed_items[index]['status']}"))
-            item = reviewed_items[selected_review]
-            st.markdown("**Originalvorschlag**")
-            st.json(item["original_payload"])
-            if item["reviewed_payload"] is not None:
-                st.markdown("**Menschliche Entscheidung**")
-                st.json(item["reviewed_payload"])
-
-    concepts, edges = load_graph(course_key)
-    st.markdown(f"#### Wissensatlas · {len(concepts)} Konzepte · {len(edges)} Verbindungen")
-    if concepts:
-        st.caption("Die Gesamtansicht zeigt die Struktur des Second Brains. Wähle ein Konzept aus, um seine direkten Beziehungen detailliert zu betrachten.")
-        concept_names = {int(item["id"]): item["name"] for item in concepts}
-        degrees = {concept_id: 0 for concept_id in concept_names}
-        for edge in edges:
-            degrees[int(edge["source_concept_id"])] += 1
-            degrees[int(edge["target_concept_id"])] += 1
-        concept_ids = sorted(concept_names, key=lambda concept_id: concept_names[concept_id].casefold())
-        default_focus = max(concept_ids, key=lambda concept_id: degrees[concept_id])
-        view = st.radio("Ansicht", ["Gesamtansicht", "Fokusansicht"], horizontal=True,
-                        key="brain_graph_view")
-        if view == "Gesamtansicht":
-            focus_id = None
-            visible_concepts, visible_edges = concepts, edges
-            show_edge_labels = st.toggle("Kantenbeschriftungen anzeigen", value=False,
-                                          key="brain_show_edge_labels")
-        else:
-            st.caption("Konzept suchen oder auswählen:")
-            focus_id = st.selectbox("Graph-Fokus", concept_ids,
-                index=concept_ids.index(default_focus),
-                format_func=lambda concept_id: concept_names[concept_id], key="brain_graph_focus")
-            hops = st.radio("Nachbarschaft", [1, 2], horizontal=True,
-                            format_func=lambda value: f"{value} Hop" if value == 1 else "2 Hops",
-                            key="brain_graph_hops")
-            visible_concepts, visible_edges = focus_subgraph(concepts, edges, focus_id, hops)
-            show_edge_labels = True
-        include_notes = st.toggle("Beleg-Notes im Graphen anzeigen", value=False, key="brain_show_notes")
-        visible_note_ids = {int(value) for concept in visible_concepts
-                            for value in (concept["note_ids"] or "").split(",") if value.isdigit()}
-        visible_notes = [note for note in course_notes if int(note["id"]) in visible_note_ids]
-        st.caption("Blau: Konzepte · Orange: Knowledge Notes. Zoome mit dem Mausrad, verschiebe den Graphen oder einzelne Knoten und klicke für Details.")
-        st.iframe(build_graph_html(visible_concepts, visible_edges, visible_notes,
-                                   include_notes=include_notes,
-                                   show_edge_labels=show_edge_labels,
-                                   focus_concept_id=focus_id), height=970)
-        with st.expander("Belege und Details im Atlas"):
-            for concept in concepts:
-                ids = [int(value) for value in (concept["note_ids"] or "").split(",") if value.isdigit()]
-                sources = "; ".join(note_labels[value] for value in ids if value in note_labels) or "Keine Quelle verknüpft"
-                st.markdown(f"**{concept['name']}** · {concept['origin']}  \n{concept['description'] or 'Keine Kurzbeschreibung'}  \nQuellen: {sources}")
-            for edge in edges:
-                ids = [int(value) for value in (edge["note_ids"] or "").split(",") if value.isdigit()]
-                sources = "; ".join(note_labels[value] for value in ids if value in note_labels) or "Keine Quelle verknüpft"
-                status = "KI-generiert" if edge["review_status"] == "ai_generated" else "Nutzerbestätigt"
-                st.markdown(f"{edge['source_name']} — *{RELATION_TYPES.get(edge['relation_type'], edge['relation_type'])}* → {edge['target_name']}  \n{edge['relation_description']}  \nBegründung: {edge['rationale']}  \nBelege: {sources}  \nStatus: {status}")
+    course = st.selectbox("Kurs", courses, key="brain_course")
+    concepts, edges = load_graph(course)
+    notes = load_notes(course=course)
+    if not concepts:
+        st.info("Noch keine Konzepte. Nach der Verarbeitung neuer Dokumente wächst der Atlas automatisch.")
     else:
-        st.info("Noch keine Konzepte im Atlas. Verarbeite ein neues Dokument oder ergänze Konzepte manuell.")
-
-    st.markdown("#### Wissen selbst ergänzen")
-    with st.expander("Konzept manuell anlegen"):
-        with st.form("manual_brain_concept"):
-            manual_name = st.text_input("Konzeptname")
-            manual_description = st.text_area("Kurzbeschreibung")
-            manual_sources = st.multiselect("Belege (optional)", list(note_labels),
-                format_func=lambda value: note_labels[value], key="manual_concept_sources")
-            add_concept = st.form_submit_button("Konzept anlegen")
-        if add_concept:
-            try:
-                if not manual_name.strip():
-                    raise ValueError("Bitte einen Konzeptnamen eingeben.")
-                add_manual_concept(course_key, manual_name, manual_description, manual_sources)
-                export_course_to_obsidian(course_key)
-                st.rerun()
-            except (ValueError, sqlite3.Error, OSError) as error:
-                st.error(str(error) or "Das Konzept konnte nicht angelegt werden.")
-
-    concepts, edges = load_graph(course_key)
-    concept_options = {item["id"]: item["name"] for item in concepts}
-    if concepts:
-        with st.expander("Verbindung manuell anlegen"):
-            with st.form("manual_brain_edge"):
-                source_id = st.selectbox("Von", list(concept_options), format_func=lambda value: concept_options[value])
-                target_id = st.selectbox("Zu", list(concept_options), format_func=lambda value: concept_options[value], key="manual_edge_target")
-                relation = st.selectbox("Beziehungskategorie", list(AGENT_RELATION_TYPES), format_func=RELATION_TYPES.get, key="manual_edge_relation")
-                relation_description = st.text_area("Präzise Beziehungsbeschreibung")
-                rationale = st.text_input("Begründung")
-                evidence = st.multiselect("Belege (optional)", list(note_labels),
-                    format_func=lambda value: note_labels[value], key="manual_edge_sources")
-                add_edge = st.form_submit_button("Verbindung anlegen")
-            if add_edge:
+        st.caption("Die Gesamtansicht zeigt die Struktur des Second Brains. Wähle ein Konzept aus, um seine direkten Beziehungen detailliert zu betrachten.")
+        names = {int(item["id"]): item["name"] for item in concepts}
+        view = st.radio("Ansicht", ["Gesamtansicht", "Fokusansicht"], horizontal=True, key="brain_graph_view")
+        focus_id = None
+        if view == "Fokusansicht":
+            focus_id = st.selectbox("Graph-Fokus", list(names), format_func=names.get, key="brain_graph_focus")
+            hops = st.radio("Nachbarschaft", [1, 2], horizontal=True, key="brain_graph_hops")
+            visible, visible_edges = focus_subgraph(concepts, edges, focus_id, hops)
+            labels = True
+        else:
+            visible, visible_edges = concepts, edges
+            labels = st.toggle("Kantenbeschriftungen anzeigen", value=False, key="brain_show_edge_labels")
+        include_notes = st.toggle("Beleg-Notes im Graphen anzeigen", value=False, key="brain_show_notes")
+        displayed = [dict(concept, description=concept_summary(concept, notes)) for concept in visible]
+        selected = atlas_graph(build_graph_html(displayed, visible_edges, notes,
+            include_notes=include_notes, show_edge_labels=labels, focus_concept_id=focus_id), key=f"atlas_{course}")
+        if selected and selected != st.session_state.get("last_atlas_click"):
+            st.session_state.last_atlas_click = selected
+            if selected.get("kind") == "concept" and selected.get("id") in names:
+                st.session_state.brain_selected_concept = selected["id"]
+            elif selected.get("kind") == "edge" and selected.get("id") in {e["id"] for e in edges}:
+                st.session_state.brain_selected_edge = selected["id"]
+        if st.session_state.get("brain_selected_concept") not in names:
+            st.session_state.brain_selected_concept = focus_id or next(iter(names))
+        concept_id = st.selectbox("Ausgewähltes Konzept", list(names), format_func=names.get, key="brain_selected_concept")
+        concept = next(item for item in concepts if item["id"] == concept_id)
+        st.subheader(concept["name"])
+        st.write(concept_summary(concept, notes))
+        linked = [edge for edge in edges if concept_id in (edge["source_concept_id"], edge["target_concept_id"])]
+        for edge in linked:
+            category = RELATION_TYPES.get(edge["relation_type"], edge["relation_type"])
+            st.caption(f"{edge['source_name']} — {category} → {edge['target_name']}")
+        _render_chat_sources(_concept_sources(concept, notes), expand_first=True)
+        with st.expander("Konzept bearbeiten"):
+            with st.form(f"edit_concept_{concept_id}"):
+                name = st.text_input("Konzeptname", value=concept["name"])
+                description = st.text_area("Kurzbeschreibung", value=concept["description"])
+                save = st.form_submit_button("Konzept speichern")
+            if save:
                 try:
-                    if not relation_description.strip() or not rationale.strip():
-                        raise ValueError("Bitte Beschreibung und Begründung für die Beziehung angeben.")
-                    add_manual_edge(course_key, source_id, target_id, relation, rationale, evidence,
-                                    relation_description=relation_description)
-                    export_course_to_obsidian(course_key)
+                    save_concept(concept_id, name, description, _ids(concept))
                     st.rerun()
                 except (ValueError, sqlite3.Error, OSError) as error:
-                    st.error(str(error) or "Die Verbindung konnte nicht angelegt werden.")
-
-        with st.expander("Bestätigte Konzepte bearbeiten oder zusammenführen"):
-            for concept in concepts:
-                with st.form(f"edit_concept_{concept['id']}"):
-                    st.markdown(f"**{concept['name']}** · {concept['origin']}")
-                    edited_name = st.text_input("Name", value=concept["name"], key=f"ecn_{concept['id']}")
-                    edited_description = st.text_area("Kurzbeschreibung", value=concept["description"], key=f"ecd_{concept['id']}")
-                    existing_ids = [int(value) for value in (concept["note_ids"] or "").split(",") if value.isdigit()]
-                    evidence = st.multiselect("Quellen", list(note_labels), default=[i for i in existing_ids if i in note_labels],
-                        format_func=lambda value: note_labels[value], key=f"ecs_{concept['id']}")
-                    save = st.form_submit_button("Änderungen speichern")
-                    remove = st.form_submit_button("Konzept löschen")
+                    st.error(str(error) or "Das Konzept konnte nicht gespeichert werden.")
+        with st.expander("Konzept löschen"):
+            confirm = st.checkbox("Konzept und seine Graph-Verbindungen löschen; Notes und PDFs bleiben erhalten.", key=f"confirm_concept_{concept_id}")
+            if st.button("Konzept löschen", key=f"delete_concept_{concept_id}", disabled=not confirm):
+                delete_concept(concept_id)
+                st.session_state.pop("last_atlas_click", None)
+                st.rerun()
+        if edges:
+            edge_options = {e["id"]: f"{e['source_name']} → {e['target_name']}" for e in edges}
+            if st.session_state.get("brain_selected_edge") not in edge_options:
+                st.session_state.brain_selected_edge = next(iter(edge_options))
+            edge_id = st.selectbox("Ausgewählte Beziehung", list(edge_options), format_func=edge_options.get, key="brain_selected_edge")
+            edge = next(e for e in edges if e["id"] == edge_id)
+            st.caption("Status: " + ("KI-generiert" if edge["review_status"] == "ai_generated" else "Nutzerbestätigt"))
+            st.caption("Herkunft: " + (edge["generation_source"] or edge["origin"]))
+            st.write(edge["relation_description"])
+            st.caption("Begründung: " + edge["rationale"])
+            for note in notes:
+                if note["id"] in _ids(edge):
+                    st.caption(f"Beleg: {note['title']} · {note['source_file']} · Seiten {note['source_pages']}")
+            with st.expander("Beziehung bearbeiten"):
+                with st.form(f"edit_edge_{edge_id}"):
+                    category = st.selectbox("Kategorie", list(RELATION_TYPES), index=list(RELATION_TYPES).index(edge["relation_type"]), format_func=RELATION_TYPES.get)
+                    description = st.text_area("Beziehungsbeschreibung", value=edge["relation_description"])
+                    save = st.form_submit_button("Beziehung speichern")
                 if save:
                     try:
-                        save_concept(concept["id"], edited_name, edited_description, evidence)
-                        export_course_to_obsidian(course_key)
+                        if not description.strip():
+                            raise ValueError("Bitte eine Beziehungsbeschreibung eingeben.")
+                        save_edge(edge_id, edge["source_concept_id"], edge["target_concept_id"], category,
+                                  edge["rationale"], _ids(edge), relation_description=description)
                         st.rerun()
                     except (ValueError, sqlite3.Error, OSError) as error:
-                        st.error(str(error) or "Das Konzept konnte nicht gespeichert werden.")
-                if remove:
-                    delete_concept(concept["id"])
-                    export_course_to_obsidian(course_key)
+                        st.error(str(error) or "Die Beziehung konnte nicht gespeichert werden.")
+            with st.expander("Beziehung löschen"):
+                confirm = st.checkbox("Nur diese Graph-Beziehung löschen.", key=f"confirm_edge_{edge_id}")
+                if st.button("Beziehung löschen", disabled=not confirm, key=f"delete_edge_{edge_id}"):
+                    delete_edge(edge_id)
+                    st.session_state.pop("last_atlas_click", None)
                     st.rerun()
-            if len(concepts) > 1:
-                with st.form("merge_brain_concepts"):
-                    merge_source = st.selectbox("Dieses Konzept zusammenführen", list(concept_options),
-                        format_func=lambda value: concept_options[value], key="merge_source")
-                    merge_target = st.selectbox("Behalten als", list(concept_options),
-                        format_func=lambda value: concept_options[value], key="merge_target")
-                    do_merge = st.form_submit_button("Zusammenführen")
-                if do_merge:
-                    try:
-                        merge_concepts(merge_source, merge_target)
-                        export_course_to_obsidian(course_key)
-                        st.rerun()
-                    except (ValueError, sqlite3.Error, OSError) as error:
-                        st.error(str(error))
-
-    if edges:
-        with st.expander("Verbindungen bearbeiten"):
-            for edge in edges:
-                with st.form(f"edit_edge_{edge['id']}"):
-                    st.markdown(f"**{edge['source_name']} → {edge['target_name']}**")
-                    source_id = st.selectbox("Von", list(concept_options), index=list(concept_options).index(edge["source_concept_id"]),
-                        format_func=lambda value: concept_options[value], key=f"es_{edge['id']}")
-                    target_id = st.selectbox("Zu", list(concept_options), index=list(concept_options).index(edge["target_concept_id"]),
-                        format_func=lambda value: concept_options[value], key=f"et_{edge['id']}")
-                    rel_options = list(AGENT_RELATION_TYPES)
-                    if edge["relation_type"] not in rel_options:
-                        rel_options.append(edge["relation_type"])
-                    current = edge["relation_type"] if edge["relation_type"] in rel_options else rel_options[0]
-                    relation = st.selectbox("Typ", rel_options, index=rel_options.index(current),
-                        format_func=RELATION_TYPES.get, key=f"er_{edge['id']}")
-                    relation_description = st.text_area("Präzise Beziehungsbeschreibung",
-                        value=edge["relation_description"], key=f"edesc_{edge['id']}")
-                    rationale = st.text_input("Begründung", value=edge["rationale"], key=f"era_{edge['id']}")
-                    source_ids = [int(value) for value in (edge["note_ids"] or "").split(",") if value.isdigit()]
-                    evidence = st.multiselect("Belege", list(note_labels), default=[i for i in source_ids if i in note_labels],
-                        format_func=lambda value: note_labels[value], key=f"ev_{edge['id']}")
-                    save = st.form_submit_button("Verbindung speichern")
-                    remove = st.form_submit_button("Verbindung löschen")
-                if save:
-                    try:
-                        if not relation_description.strip():
-                            raise ValueError("Bitte die fachliche Beziehungsbeschreibung angeben.")
-                        save_edge(edge["id"], source_id, target_id, relation, rationale, evidence,
-                                  relation_description=relation_description)
-                        export_course_to_obsidian(course_key)
-                        st.rerun()
-                    except (ValueError, sqlite3.Error, OSError) as error:
-                        st.error(str(error) or "Die Verbindung konnte nicht gespeichert werden.")
-                if remove:
-                    delete_edge(edge["id"])
-                    export_course_to_obsidian(course_key)
-                    st.rerun()
-
-    with st.expander("In Obsidian öffnen"):
-        st.write("Exportiert die Knowledge Notes und die gekennzeichneten Beziehungen dieses Kurses. Öffne den Exportordner in Obsidian über **Vault öffnen → Ordner als Vault öffnen**.")
-        if st.button("Obsidian-Export aktualisieren", key="export_brain_obsidian"):
+    with st.expander("Optionaler Obsidian-Export"):
+        if st.button("Obsidian-Export aktualisieren", key="obsidian_export"):
             try:
-                export_path = export_course_to_obsidian(course_key)
-                report = validate_obsidian_export(export_path, expected_relationships=len(edges))
-                st.success("Export aktualisiert. Der Ordner kann jetzt als Obsidian-Vault geöffnet werden.")
-                st.code(str(export_path), language=None)
-                st.write(
-                    f"Validator: {report['exported_notes']} Notes · {report['exported_concepts']} Konzepte · "
-                    f"{report['confirmed_relationships']} Beziehungen · "
-                    f"{report['confirmed_relationship_wikilinks']} Wikilinks im Beziehungsabschnitt · "
-                    f"{report['wikilinks']} Wikilinks insgesamt "
-                    f"({report['resolvable_wikilinks']} auflösbar, {report['unresolvable_wikilinks']} fehlerhaft) · "
-                    f"{report['connected_notes_and_concepts']} vernetzte · {report['isolated_notes_and_concepts']} isolierte Knoten."
-                )
-            except (ValueError, sqlite3.Error, OSError) as error:
-                st.error(str(error) or "Der Obsidian-Export konnte nicht erstellt werden.")
-        st.caption(f"{len(course_notes)} Notes und {len(edges)} Beziehungen werden exportiert. Offene und abgelehnte Vorschläge bleiben außen vor.")
-        if not edges:
-            st.info("Für einen verbundenen Graphen zuerst im Second Brain Beziehungsvorschläge prüfen und übernehmen oder eine Verbindung manuell anlegen.")
+                path = export_course_to_obsidian(course)
+                st.success("Export wurde aktualisiert.")
+                st.code(str(path))
+            except (OSError, ValueError, sqlite3.Error):
+                st.error("Der Export konnte nicht geschrieben werden.")

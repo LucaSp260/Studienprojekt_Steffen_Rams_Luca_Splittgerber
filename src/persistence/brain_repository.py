@@ -3,7 +3,7 @@
 import hashlib
 import json
 import re
-from contextlib import closing
+from contextlib import closing, nullcontext
 
 from src.persistence.database import get_connection
 
@@ -321,8 +321,9 @@ def delete_edge(edge_id):
         connection.execute("DELETE FROM brain_edges WHERE id = ?", (edge_id,))
 
 
-def load_graph(course):
-    with closing(get_connection()) as connection:
+def load_graph(course, connection=None):
+    context = nullcontext(connection) if connection is not None else closing(get_connection())
+    with context as connection:
         concepts = connection.execute(
             """SELECT c.*, GROUP_CONCAT(n.id) AS note_ids, GROUP_CONCAT(DISTINCT d.filename) AS sources
                FROM brain_concepts c

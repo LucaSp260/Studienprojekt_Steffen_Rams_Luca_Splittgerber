@@ -1,7 +1,7 @@
 """SQLite verwaltet nur Übersicht und Zuordnung der Markdown-Notes."""
 
 import json
-from contextlib import closing
+from contextlib import closing, nullcontext
 
 from src.persistence.database import get_connection
 
@@ -16,7 +16,7 @@ def register_note(connection, document_id, note, markdown_path):
     ).lastrowid
 
 
-def load_notes(document_id=None, course=None):
+def load_notes(document_id=None, course=None, connection=None):
     query = """SELECT knowledge_notes.*, documents.course, documents.filename AS source_file FROM knowledge_notes
                JOIN documents ON documents.id = knowledge_notes.document_id"""
     conditions, parameters = [], []
@@ -29,5 +29,6 @@ def load_notes(document_id=None, course=None):
     if conditions:
         query += " WHERE " + " AND ".join(conditions)
     query += " ORDER BY documents.course, title, knowledge_notes.id"
-    with closing(get_connection()) as connection:
+    context = nullcontext(connection) if connection is not None else closing(get_connection())
+    with context as connection:
         return connection.execute(query, parameters).fetchall()

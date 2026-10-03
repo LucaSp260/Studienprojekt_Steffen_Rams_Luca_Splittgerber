@@ -22,7 +22,7 @@ def save_artifact(artifact_type, title, course, configuration, content):
         ).lastrowid
 
 
-def load_artifacts(artifact_type=None):
+def load_artifacts(artifact_type=None, course=None):
     query = "SELECT * FROM generated_artifacts"
     parameters = ()
     if artifact_type is not None:
@@ -30,9 +30,17 @@ def load_artifacts(artifact_type=None):
             raise ValueError("Unbekannter Artefakttyp.")
         query += " WHERE artifact_type = ?"
         parameters = (artifact_type,)
+    if course is not None:
+        query += (" AND" if artifact_type is not None else " WHERE") + " course = ?"
+        parameters += (course,)
     query += " ORDER BY created_at DESC, id DESC"
     with closing(get_connection()) as connection:
         return [_decode(row) for row in connection.execute(query, parameters).fetchall()]
+
+
+def delete_artifact(artifact_id):
+    with closing(get_connection()) as connection, connection:
+        connection.execute("DELETE FROM generated_artifacts WHERE id=?", (artifact_id,))
 
 
 def load_artifact(artifact_id):

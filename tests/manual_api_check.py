@@ -69,7 +69,7 @@ def main():
         database.initialize_database()
         app_path = str(Path(__file__).resolve().parents[1] / 'app.py')
         app = AppTest.from_file(app_path).run(timeout=30)
-        app.radio[0].set_value('Wissensbasis').run()
+        app.radio[0].set_value('Generierte Notes').run()
         assert not app.exception
         assert len(load_notes()) == len(rows)
         print(f'Echter API-Test erfolgreich: {selected.provider}, {selected.model}, {len(rows)} Notes; YAML, Quellen und neue UI-Sitzung geprüft.')

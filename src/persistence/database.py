@@ -1,6 +1,8 @@
 """Technische SQLite-Persistenz, kein zusätzlicher fachlicher Layer."""
 
 import json
+from datetime import datetime, timezone
+from contextlib import closing
 import sqlite3
 from pathlib import Path
 
@@ -15,14 +17,36 @@ def get_connection():
     return connection
 
 
+def backup_database(label="schema"):
+    """SQLite online backup includes committed WAL data; never copy a live DB file."""
+    if not DATABASE_PATH.exists():
+        return None
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%f")
+    path = DATABASE_PATH.with_name(f"{DATABASE_PATH.stem}.before-{label}-{stamp}.db")
+    with closing(sqlite3.connect(DATABASE_PATH)) as source, closing(sqlite3.connect(path)) as target:
+        source.backup(target)
+        if target.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+            raise sqlite3.DatabaseError("Die Datenbanksicherung ist ungültig.")
+    return path
+
+
 def initialize_database():
     connection = get_connection()
     try:
+        chat_columns = {row["name"] for row in connection.execute("PRAGMA table_info(chats)")}
+        has_courses = connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='courses'").fetchone() is not None
+        if chat_columns and ("pinned" not in chat_columns or not has_courses):
+            backup_database("ui-refinement")
         with connection:
             had_brain_processing = connection.execute(
                 "SELECT 1 FROM sqlite_master WHERE type='table' AND name='brain_note_processing'"
             ).fetchone() is not None
             connection.executescript("""
+                CREATE TABLE IF NOT EXISTS courses (
+                    name TEXT PRIMARY KEY,
+                    name_key TEXT NOT NULL UNIQUE
+                );
                 CREATE TABLE IF NOT EXISTS chats (
                     id INTEGER PRIMARY KEY,
                     title TEXT NOT NULL DEFAULT 'Neuer Chat',
@@ -138,6 +162,13 @@ def initialize_database():
                     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 );
             """)
+            if "pinned" not in {row["name"] for row in connection.execute("PRAGMA table_info(chats)")}:
+                connection.execute("ALTER TABLE chats ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0 CHECK(pinned IN (0,1))")
+            for row in connection.execute("""SELECT course FROM documents UNION SELECT course FROM brain_concepts
+                    UNION SELECT course FROM brain_proposals UNION SELECT course FROM generated_artifacts""").fetchall():
+                if row[0] and row[0].strip():
+                    connection.execute("INSERT OR IGNORE INTO courses(name,name_key) VALUES (?,?)",
+                                       (row[0], row[0].casefold()))
             if not had_brain_processing:
                 # Bestehende Notes werden bei der einmaligen Migration nicht erneut an die KI gesendet.
                 connection.execute(
@@ -197,7 +228,29 @@ def create_chat():
 def list_chats():
     connection = get_connection()
     try:
-        return connection.execute("SELECT * FROM chats ORDER BY updated_at DESC, id DESC").fetchall()
+        return connection.execute("SELECT * FROM chats ORDER BY pinned DESC, updated_at DESC, id DESC").fetchall()
+    finally:
+        connection.close()
+
+
+def set_chat_pinned(chat_id, pinned):
+    connection = get_connection()
+    try:
+        with connection:
+            if connection.execute("UPDATE chats SET pinned=? WHERE id=?", (int(bool(pinned)), chat_id)).rowcount != 1:
+                raise ValueError("Chat wurde nicht gefunden.")
+    finally:
+        connection.close()
+
+
+def delete_chat(chat_id):
+    connection = get_connection()
+    try:
+        with connection:
+            connection.execute("DELETE FROM messages WHERE chat_id=?", (chat_id,))
+            # Old exams can reference a chat; preserve these independent learning contents.
+            connection.execute("UPDATE exams SET chat_id=NULL WHERE chat_id=?", (chat_id,))
+            connection.execute("DELETE FROM chats WHERE id=?", (chat_id,))
     finally:
         connection.close()
 

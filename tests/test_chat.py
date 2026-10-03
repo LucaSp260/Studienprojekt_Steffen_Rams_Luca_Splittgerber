@@ -126,7 +126,7 @@ class LearningChatTests(unittest.TestCase):
             app = AppTest.from_file(str(ROOT / "app.py")).run(timeout=30)
             self.assertEqual(len(app.exception), 0)
             self.assertTrue(any("Alte Antwort" in item.value for item in app.markdown))
-            for page in ["Unterlagen", "Wissensbasis", "Einstellungen", "Lernen"]:
+            for page in ["Unterlagen", "Generierte Notes", "Einstellungen", "Lernen"]:
                 app.radio[0].set_value(page).run()
             chat_agent.assert_not_called()
 

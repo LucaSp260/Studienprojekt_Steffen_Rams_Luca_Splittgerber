@@ -17,14 +17,15 @@ from src.persistence.artifact_repository import save_artifact
 
 
 def create_exercises(request, *, retriever=retrieve, llm_service=None, critic=review_exercises,
-                     persist=True, progress=None):
+                     run_critic=True, persist=True, progress=None):
     try:
         request = request if isinstance(request, ExerciseRequest) else ExerciseRequest.model_validate(request)
     except ValidationError:
         raise AgentError("Die Angaben für die Übungen sind ungültig.") from None
 
     notify(progress, "Wissensbasis wird durchsucht...")
-    query = (f"{request.topic}, Definition, Zweck, Zusammenhänge und Anwendung; "
+    focus = request.topic or f"Zentrale Themen und Grundlagen des Kurses {request.course}"
+    query = (f"{focus}, Definition, Zweck, Zusammenhänge und Anwendung; "
              f"geeignet für {request.exercise_type}")
     notes = retriever(query, top_k=5, course=request.course)
     sources = build_sources(notes)
@@ -45,7 +46,8 @@ def create_exercises(request, *, retriever=retrieve, llm_service=None, critic=re
         "Zuordnung ohne Begründung. Die jeweilige Begründung gehört in explanation_items und erklärt WARUM. "
         "Bei Aufgaben ohne Teilaufgaben bleiben die strukturierten Listen leer; solution enthält die kompakte "
         "Kurzlösung und explanation die didaktische Vertiefung. "
-        "Bei Typ Gemischt darfst du die anderen vier Typen sinnvoll kombinieren.\n"
+        "Bei Typ Gemischt darfst du die anderen vier Typen sinnvoll kombinieren. "
+        "Ist kein Thema angegeben, wähle passende Themen aus den bereitgestellten Notes des Kurses.\n"
         f"Anforderung: {request.model_dump_json()}\n"
         f"Verbindlicher Schwierigkeitsplan in Aufgabenreihenfolge: {plan}\n"
         f"Knowledge Notes: {sources_for_prompt(sources)}"
@@ -55,8 +57,11 @@ def create_exercises(request, *, retriever=retrieve, llm_service=None, critic=re
     draft = parse_model(service.generate(prompt, ExerciseDraft), ExerciseDraft, "die Übungen")
     _validate_draft(draft, request, sources)
 
-    notify(progress, "Aufgaben werden geprüft...")
-    critic_status, issues, final = _apply_critic(request, sources, draft, service, critic)
+    if run_critic:
+        notify(progress, "Aufgaben werden geprüft...")
+        critic_status, issues, final = _apply_critic(request, sources, draft, service, critic)
+    else:
+        critic_status, issues, final = "skipped", [], draft
     validate_solution_layers(final.exercises)
     artifact = {
         "title": final.title,

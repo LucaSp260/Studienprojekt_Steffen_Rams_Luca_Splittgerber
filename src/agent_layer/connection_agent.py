@@ -211,7 +211,7 @@ def propose_incremental_connections(course, new_notes, context_notes, existing_c
             "die mindestens eine neue note_id als Beleg haben. Prüfe ausdrücklich auch Beziehungen "
             "zwischen den neuen Notes. Verwende vorhandene Konzeptnamen, wenn sie fachlich identisch "
             "sind; erzeuge keine Duplikate bestehender Beziehungen. Konzepte sind Fachbegriffe, keine "
-            "Dokumentnamen. Jede gerichtete Beziehung braucht eine passende kanonische Kategorie aus "
+            "Dokumentnamen. Gib jedem Konzept eine kurze description mit ein bis drei Sätzen. Jede gerichtete Beziehung braucht eine passende kanonische Kategorie aus "
             f"{json.dumps(AGENT_RELATION_TYPES, ensure_ascii=False)}, eine konkrete "
             "relation_description und eine belegende rationale. note_ids müssen aus den bereitgestellten "
             "Notes stammen und mindestens eine neue Note enthalten. Höchstens 20 Konzepte und 30 "

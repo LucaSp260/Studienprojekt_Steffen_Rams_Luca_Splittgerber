@@ -116,7 +116,7 @@ def validate_obsidian_export(root, expected_relationships=None):
     return report
 
 
-def export_course_to_obsidian(course):
+def export_course_to_obsidian(course, *, graph=None, notes=None):
     """Schreibt Kurs-Notes sowie KI-generierte und bestätigte Graphkanten.
 
     Die Exportdateien liegen in einem eigenen, direkt als Vault nutzbaren
@@ -124,8 +124,8 @@ def export_course_to_obsidian(course):
     """
     course_key = course or ""
     course_label = course_key or "Ohne Kurs"
-    concepts, edges = load_graph(course_key)
-    notes = [row for row in load_notes() if (row["course"] or "") == course_key]
+    concepts, edges = graph if graph is not None else load_graph(course_key)
+    notes = notes if notes is not None else load_notes(course=course_key)
     course_folder = f"{_slug(course_label)}-{hashlib.sha256(course_key.encode('utf-8')).hexdigest()[:8]}"
     root = KNOWLEDGE_BASE_PATH / "Second Brain" / course_folder
     notes_folder = root / "notes"

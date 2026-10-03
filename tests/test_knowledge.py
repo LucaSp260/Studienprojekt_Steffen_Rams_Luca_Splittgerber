@@ -219,7 +219,7 @@ class KnowledgeTests(unittest.TestCase):
     def test_ui_explicit_action_and_restart(self):
         with patch.object(manager, 'LLMService', return_value=self.service):
             app = AppTest.from_file(str(ROOT / 'app.py')).run(timeout=30)
-            app.radio[0].set_value('Wissensbasis').run()
+            app.radio[0].set_value('Unterlagen').run()
             app.run()
             self.service.generate.assert_not_called()
             app.button(key=f'process_{self.document_id}').click().run(timeout=30)
@@ -228,28 +228,25 @@ class KnowledgeTests(unittest.TestCase):
             app.run()
             self.service.generate.assert_called_once()
             restarted = AppTest.from_file(str(ROOT / 'app.py')).run(timeout=30)
-            restarted.radio[0].set_value('Wissensbasis').run()
+            restarted.radio[0].set_value('Generierte Notes').run()
             self.assertEqual(len(restarted.exception), 0)
             self.assertTrue(any('Primärschlüssel' in item.value for item in restarted.markdown))
             self.service.generate.assert_called_once()
 
-    def test_settings_buttons_only_test_explicitly(self):
-        with patch('src.ui.settings.LLMService') as service_class:
+    def test_settings_buttons_only_use_metadata_checks(self):
+        with patch('src.ui.settings.connection_status', return_value=(True, 'Metadata OK')) as status:
             app = AppTest.from_file(str(ROOT / 'app.py')).run(timeout=30)
             app.radio[0].set_value('Einstellungen').run()
-            service_class.assert_not_called()
-            app.text_input[0].set_value('only-test-key')
+            self.assertEqual(len(app.exception), 0)
+            status.assert_called()
+            app.text_input[0].set_value('test-key')
             app.text_input[1].set_value('test-model')
             app.button(key='FormSubmitter:llm_settings_openai-Speichern').click().run()
             self.assertEqual(len(app.exception), 0)
-            service_class.assert_not_called()
-            self.assertEqual(config.load_config().api_key, 'only-test-key')
-            app.run()
+            self.assertEqual(config.load_config().model, 'test-model')
             self.assertEqual(app.text_input[0].value, '')
             app.button(key='FormSubmitter:llm_settings_openai-Verbindung testen').click().run()
-            service_class.return_value.test_connection.assert_called_once()
-            app.run()
-            service_class.return_value.test_connection.assert_called_once()
+            self.assertEqual(len(app.exception), 0)
 
     def test_provider_errors_are_safe(self):
         settings = config.LLMConfig('gemini', 'test-model', 'test-key')

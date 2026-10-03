@@ -82,7 +82,7 @@ def build_graph_html(concepts, edges, notes, *, include_notes=False, show_edge_l
     node_details, edge_details = {}, {}
     for concept in concepts:
         concept_id = int(concept["id"])
-        source_notes = [notes_by_id[note_id]["title"] for note_id in sorted(_note_ids(concept["note_ids"]))
+        source_notes = [f"{notes_by_id[note_id]['title']} ({notes_by_id[note_id]['source_file']}, S. {notes_by_id[note_id]['source_pages']})" for note_id in sorted(_note_ids(concept["note_ids"]))
                         if note_id in notes_by_id]
         details = (
             f"<b>{_safe(concept['name'])}</b><br>Typ: Konzept"
@@ -143,12 +143,24 @@ def build_graph_html(concepts, edges, notes, *, include_notes=False, show_edge_l
     details_data = json.dumps({"nodes": node_details, "edges": edge_details}, ensure_ascii=False).replace("<", "\\u003c")
     panel = (
         '<div id="brain-selection" style="font:14px Arial,sans-serif; padding:12px 16px; '
-        'border:1px solid #cbd5e1; border-radius:8px; min-height:95px; overflow:auto;">'
+        'border:1px solid #cbd5e1; border-radius:8px; min-height:95px; max-height:180px; overflow:auto;">'
         'Klicke auf einen Knoten oder eine Verbindung, um Details zu sehen.</div>'
         '<script>const brainDetails = ' + details_data + ';'
+        # All detail values were HTML-escaped above. vis-network needs an element
+        # for formatted tooltips, otherwise it displays the HTML markup literally.
+        '[nodes, edges].forEach(function(dataset) {dataset.forEach(function(item) {'
+        'if (item.title) {const tooltip = document.createElement("div");'
+        'tooltip.style.maxWidth = "360px"; tooltip.style.whiteSpace = "normal";'
+        'tooltip.style.overflowWrap = "anywhere"; tooltip.innerHTML = item.title;'
+        'dataset.update({id: item.id, title: tooltip});}'
+        '});});'
         'network.on("click", function(params) {'
         'const key = params.nodes.length ? params.nodes[0] : params.edges[0];'
         'const details = params.nodes.length ? brainDetails.nodes[key] : brainDetails.edges[key];'
+        'if (key && (key.startsWith("concept-") || key.startsWith("relationship-"))) {'
+        'parent.postMessage({type: "atlas-selection", selection: {'
+        'kind: key.startsWith("concept-") ? "concept" : "edge", '
+        'id: Number(key.split("-")[1])}}, "*");}'
         'document.getElementById("brain-selection").innerHTML = details || '
         '"Klicke auf einen Knoten oder eine Verbindung, um Details zu sehen.";'
         '});</script>'
@@ -159,8 +171,19 @@ def build_graph_html(concepts, edges, notes, *, include_notes=False, show_edge_l
         'network.setOptions({physics: false});'
         'network.fit({animation: false});'
         f'const focusNode = {focus};'
-        'if (focusNode) {network.focus(focusNode, {scale: Math.min(network.getScale(), 1), '
-        'animation: false});}'
+        'if (focusNode) {'
+        'const center = network.getPositions([focusNode])[focusNode];'
+        'let radiusX = 1, radiusY = 1;'
+        'nodes.getIds().forEach(function(id) {'
+        'const bounds = network.getBoundingBox(id);'
+        'radiusX = Math.max(radiusX, Math.abs(bounds.left-center.x), Math.abs(bounds.right-center.x));'
+        'radiusY = Math.max(radiusY, Math.abs(bounds.top-center.y), Math.abs(bounds.bottom-center.y));'
+        '});'
+        'const viewport = network.body.container;'
+        'const scale = Math.min(network.getScale(), 1, '
+        'Math.max(80, viewport.clientWidth-90)/(2*radiusX), '
+        'Math.max(80, viewport.clientHeight-90)/(2*radiusY));'
+        'network.focus(focusNode, {scale: scale, animation: false});}'
         '});</script>'
     )
     return page.replace("</body>", panel + settle + "</body>")

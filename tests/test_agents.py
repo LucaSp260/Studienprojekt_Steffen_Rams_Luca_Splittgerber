@@ -339,7 +339,7 @@ class AgentTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             ExamRequest(course="SWA", duration_minutes=10, task_count=11, difficulty="mittel")
         with self.assertRaises(ValidationError):
-            ExerciseRequest(course="SWA", topic="", count=1, difficulty="leicht",
+            ExerciseRequest(course="", topic="", count=1, difficulty="leicht",
                             exercise_type="Offene Frage")
 
 

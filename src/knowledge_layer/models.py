@@ -1,6 +1,6 @@
 """Validierte fachliche Felder; Quelle und Kurs stammen aus SQLite."""
 
-import re
+from src.knowledge_layer.tags import normalize_tags
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -27,13 +27,9 @@ class ExtractedNote(BaseModel):
     @field_validator("tags")
     @classmethod
     def clean_tags(cls, tags):
-        cleaned = []
-        for tag in tags:
-            tag = re.sub(r"[^\w-]+", "-", tag.lower()).strip("-_")
-            if not tag or len(tag) > 50 or len(tag.split("-")) > 5:
-                raise ValueError("Tags müssen kurze Begriffe sein.")
-            if tag not in cleaned:
-                cleaned.append(tag)
+        cleaned = normalize_tags(tags)
+        if not cleaned:
+            raise ValueError("Tags müssen kurze Begriffe mit höchstens drei Wörtern sein.")
         return cleaned
 
     @field_validator("source_pages")

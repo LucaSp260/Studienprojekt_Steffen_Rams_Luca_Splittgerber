@@ -18,7 +18,7 @@ from src.persistence.artifact_repository import save_artifact
 
 
 def create_exam(request, *, retriever=retrieve, llm_service=None, critic=review_exam,
-                persist=True, progress=None):
+                run_critic=True, persist=True, progress=None):
     try:
         request = request if isinstance(request, ExamRequest) else ExamRequest.model_validate(request)
     except ValidationError:
@@ -33,7 +33,11 @@ def create_exam(request, *, retriever=retrieve, llm_service=None, critic=review_
         raise AgentError("Für diesen Kurs wurden keine Knowledge Notes gefunden.")
 
     plan = difficulty_plan(request.task_count, request.difficulty)
-    lower, upper = time_target_range(request.duration_minutes)
+    timing = ""
+    if request.duration_minutes is not None:
+        lower, upper = time_target_range(request.duration_minutes)
+        timing = f"Der historische Zielbereich ist {lower} bis {upper} Minuten."
+
     prompt = (
         "Du bist der Exam Agent. Erzeuge eine vollständige Probeklausur auf Deutsch. "
         "Verwende für fachliche Aussagen ausschließlich die bereitgestellten Knowledge Notes. "
@@ -47,50 +51,66 @@ def create_exam(request, *, retriever=retrieve, llm_service=None, critic=review_
         "Kurzantworten sind die kürzestmöglichen vollständigen Antworten; Zuordnungen enthalten keine Begründung. "
         "Jedes explanation_item erklärt separat WARUM die zugehörige Antwort richtig ist. Bei Aufgaben ohne "
         "Teilaufgaben bleiben die strukturierten Listen leer und solution/explanation enthalten die zwei Ebenen. "
-        "Wähle Aufgabentyp, Umfang, Teilfragen, Begründungs- und Transferanteil so, dass die Klausur realistisch "
-        f"{lower} bis {upper} Minuten benötigt. Kurze Aufgaben bleiben kurz; umfangreichere Aufgaben tragen den "
-        "größeren Zeitanteil. estimated_minutes muss den tatsächlichen Inhalt abbilden und darf nicht zum bloßen "
-        "Auffüllen der Gesamtdauer erhöht werden.\n"
-        f"Anforderung: {request.model_dump_json()}\n"
+        "Wähle abwechslungsreiche Aufgaben passend zu Thema und Schwierigkeit. "
+        f"{timing}\n"
+        f"Anforderung: {request.model_dump_json(exclude_none=True)}\n"
         f"Verbindlicher Schwierigkeitsplan in Aufgabenreihenfolge: {plan}\n"
         f"Knowledge Notes: {sources_for_prompt(sources)}"
     )
     notify(progress, "Probeklausur wird erstellt...")
     service = llm_service or LLMService()
     draft = parse_model(service.generate(prompt, ExamDraft), ExamDraft, "die Probeklausur")
-    draft = apply_time_estimates(draft, request.duration_minutes)
+    if request.duration_minutes is not None:
+        draft = apply_time_estimates(draft, request.duration_minutes)
+    else:
+        draft = _without_timing(draft)
     _validate_draft(draft, request, sources)
 
-    notify(progress, "Probeklausur wird geprüft...")
-    critic_status, issues, final = _apply_critic(request, sources, draft, service, critic)
-    final = apply_time_estimates(final, request.duration_minutes)
-    _validate_time(final, request.duration_minutes)
+    if run_critic:
+        notify(progress, "Probeklausur wird geprüft...")
+        critic_status, issues, final = _apply_critic(request, sources, draft, service, critic)
+    else:
+        critic_status, issues, final = "skipped", [], draft
+    if request.duration_minutes is not None:
+        final = apply_time_estimates(final, request.duration_minutes)
+        _validate_time(final, request.duration_minutes)
+    else:
+        final = _without_timing(final)
     validate_solution_layers(final.tasks)
     artifact = {
         "title": final.title,
         "course": request.course,
-        "configuration": request.model_dump(),
-        "duration_minutes": final.duration_minutes,
-        "estimated_total_minutes": sum(task.estimated_minutes for task in final.tasks),
-        "tasks": [item.model_dump() for item in final.tasks],
+        "configuration": request.model_dump(exclude_none=True),
+        "tasks": [item.model_dump(exclude_none=True) for item in final.tasks],
         "total_points": final.total_points,
         "sources": [source.citation.model_dump() for source in sources],
         "critic": {"status": critic_status, "issues": issues},
     }
+    if request.duration_minutes is not None:
+        artifact.update(duration_minutes=final.duration_minutes,
+                        estimated_total_minutes=sum(task.estimated_minutes for task in final.tasks))
     artifact_id = None
     if persist:
         try:
             artifact_id = save_artifact("exam", final.title, request.course,
-                                        request.model_dump(), artifact)
+                                        request.model_dump(exclude_none=True), artifact)
         except (sqlite3.Error, OSError, ValueError):
             raise AgentError("Die Probeklausur wurde erzeugt, konnte aber nicht gespeichert werden.") from None
     return {"artifact_id": artifact_id, **artifact}
 
 
+def _without_timing(draft):
+    draft = draft.model_copy(deep=True)
+    draft.duration_minutes = None
+    for task in draft.tasks:
+        task.estimated_minutes = None
+    return draft
+
+
 def _validate_draft(draft, request, sources):
     validate_number_and_difficulty(draft.tasks, request.task_count, request.difficulty)
     used = validate_source_ids(draft.tasks, sources)
-    if draft.course != request.course or draft.duration_minutes != request.duration_minutes:
+    if draft.course != request.course or (request.duration_minutes is not None and draft.duration_minutes != request.duration_minutes):
         raise AgentError("Kurs oder Dauer der Probeklausur entspricht nicht der Anforderung.")
     if draft.total_points != sum(task.points for task in draft.tasks):
         raise AgentError("Die Gesamtpunkte sind rechnerisch inkonsistent.")
@@ -113,7 +133,8 @@ def _apply_critic(request, sources, draft, service, critic):
         critique = critic(request, sources, draft, service)
         issues = [issue.model_dump() for issue in critique.issues]
         if critique.status == "needs_revision" and critique.revised_content is not None:
-            revised = apply_time_estimates(critique.revised_content, request.duration_minutes)
+            revised = (apply_time_estimates(critique.revised_content, request.duration_minutes)
+                       if request.duration_minutes is not None else _without_timing(critique.revised_content))
             _validate_draft(revised, request, sources)
             return critique.status, issues, revised
         return critique.status, issues, draft

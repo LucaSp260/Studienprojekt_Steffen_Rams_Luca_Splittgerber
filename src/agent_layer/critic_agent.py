@@ -26,26 +26,26 @@ def review_exercises(request, sources, draft, llm_service):
         "Du bist der Critic Agent für Lernübungen. " + CRITIC_RULES + "\n"
         "Nutzeranforderung: " + request.model_dump_json() + "\n"
         "Knowledge Notes: " + sources_for_prompt(sources) + "\n"
-        "Entwurf: " + draft.model_dump_json() + "\n"
+        "Entwurf: " + draft.model_dump_json(exclude_none=True) + "\n"
         "Bewerte den Entwurf strukturiert."
     )
     return parse_model(llm_service.generate(prompt, ExerciseCritique), ExerciseCritique, "die Übungskritik")
 
 
 def review_exam(request, sources, draft, llm_service):
-    lower, upper = time_target_range(request.duration_minutes)
-    estimated = sum(task.estimated_minutes for task in draft.tasks)
+    timing = ""
+    if request.duration_minutes is not None:
+        lower, upper = time_target_range(request.duration_minutes)
+        estimated = sum(task.estimated_minutes for task in draft.tasks)
+        timing = (f"Historischer Zielbereich: {lower} bis {upper} Minuten; aktuelle lokale Schätzung: {estimated} Minuten. "
+                  "Prüfe die Eignung des Aufgabenumfangs für diese historische Zeitvorgabe.")
     prompt = (
         "Du bist der Critic Agent für Probeklausuren. " + CRITIC_RULES + " "
-        "Prüfe zusätzlich Themenvielfalt, Punkteberechnung und die Eignung des tatsächlichen Umfangs für "
-        "die Dauer. Prüfe jede Einzelzeit gegen Aufgabentyp, Schwierigkeit, Teilfragen, Antwortlänge, "
-        "Begründung und Transfer. Kurze Aufgaben dürfen nicht künstlich verlängert sein. "
-        f"Zielbereich: {lower} bis {upper} Minuten; aktuelle lokale Schätzung: {estimated} Minuten. "
-        "Liegt der Umfang außerhalb, verlange eine Revision: erweitere oder kürze die fachlich gedeckten "
-        "Aufgaben beziehungsweise Teilfragen, statt nur estimated_minutes zu verändern.\n"
-        "Nutzeranforderung: " + request.model_dump_json() + "\n"
+        "Prüfe zusätzlich Themenvielfalt, Punkteberechnung und den fachlich sinnvollen Aufgabenumfang. "
+        + timing + "\n"
+        "Nutzeranforderung: " + request.model_dump_json(exclude_none=True) + "\n"
         "Knowledge Notes: " + sources_for_prompt(sources) + "\n"
-        "Entwurf: " + draft.model_dump_json() + "\n"
+        "Entwurf: " + draft.model_dump_json(exclude_none=True) + "\n"
         "Bewerte den Entwurf strukturiert."
     )
     return parse_model(llm_service.generate(prompt, ExamCritique), ExamCritique, "die Klausurkritik")

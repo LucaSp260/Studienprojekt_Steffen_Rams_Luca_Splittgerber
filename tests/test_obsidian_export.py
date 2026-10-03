@@ -16,7 +16,7 @@ from streamlit.testing.v1 import AppTest
 
 from src.agent_layer.connection_agent import ConnectionDraft, ConnectionProposal, propose_connections
 from src.agent_layer.connection_agent import ConceptProposal
-from src.knowledge_layer import markdown_store
+from src.knowledge_layer import markdown_store, obsidian_export
 from src.knowledge_layer.models import KnowledgeNote
 from src.knowledge_layer.obsidian_export import export_course_to_obsidian, validate_obsidian_export
 from src.persistence import database as db
@@ -67,6 +67,8 @@ class ObsidianExportTests(unittest.TestCase):
         self.kb_override = patch.object(markdown_store, "KNOWLEDGE_BASE_PATH", self.root / "knowledge_base")
         self.db_override.start()
         self.kb_override.start()
+        self.export_override = patch.object(obsidian_export, "KNOWLEDGE_BASE_PATH", self.root / "knowledge_base")
+        self.export_override.start()
         db.initialize_database()
         self.pdf_path = self.root / "user_data" / "SWA" / "SWA.pdf"
         self.pdf_path.parent.mkdir(parents=True)
@@ -80,6 +82,7 @@ class ObsidianExportTests(unittest.TestCase):
         self.note_ids = [self.add_note(1), self.add_note(2)]
 
     def tearDown(self):
+        self.export_override.stop()
         self.kb_override.stop()
         self.db_override.stop()
         self.temp.cleanup()
@@ -331,7 +334,7 @@ class ObsidianExportTests(unittest.TestCase):
         app_path = Path(__file__).resolve().parents[1] / "app.py"
         with patch("src.ui.brain.build_graph_html", wraps=build_graph_html) as render:
             app = AppTest.from_file(str(app_path)).run(timeout=30)
-            app.radio[0].set_value("Second Brain").run(timeout=30)
+            app.radio[0].set_value("Wissensatlas").run(timeout=30)
             self.assertEqual(app.exception, [])
             self.assertFalse(render.call_args.kwargs["show_edge_labels"])
             labels_toggle = next(item for item in app.toggle if item.label == "Kantenbeschriftungen anzeigen")

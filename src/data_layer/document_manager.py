@@ -9,6 +9,7 @@ from pathlib import Path
 from src.data_layer.file_hash import calculate_file_hash
 from src.data_layer.pdf_loader import read_pdf
 from src.persistence.database import get_connection
+from src.persistence.course_repository import resolve_course, ensure_course
 from src.persistence.document_repository import find_document_by_hash, save_document
 
 USER_DATA_PATH = Path(__file__).resolve().parents[2] / "user_data"
@@ -56,6 +57,7 @@ def add_document(uploaded_file, course):
         return {"status": "error", "message": "Ungültige Datei: Bitte ausschließlich PDFs hochladen."}
     saved_path = None
     try:
+        course = resolve_course(course)
         content = uploaded_file.getvalue()
         file_hash = calculate_file_hash(content)
         existing = find_document_by_hash(file_hash)
@@ -68,6 +70,7 @@ def add_document(uploaded_file, course):
             existing = find_document_by_hash(file_hash, connection)
             if existing:
                 return duplicate_result(existing)
+            course = ensure_course(course, connection)
             folder.mkdir(parents=True, exist_ok=True)
             saved_path = store_new_file(folder, filename, content)
             document_id = save_document(

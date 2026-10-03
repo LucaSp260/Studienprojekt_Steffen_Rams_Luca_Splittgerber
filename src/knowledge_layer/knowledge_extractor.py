@@ -9,6 +9,10 @@ from src.knowledge_layer.models import ExtractionResult, KnowledgeNote
 from src.llm.base_provider import LLMError
 from src.llm.usage import generate_recorded
 
+from src.knowledge_layer.tags import normalize_tags
+from src.knowledge_layer.markdown_store import load_note
+from src.persistence.knowledge_repository import load_notes
+
 MAX_CHUNK_CHARS = 16000
 MAX_CHUNK_PAGES = 6
 
@@ -54,6 +58,8 @@ def merge_notes(notes):
             value = getattr(note, field)
             if value and value not in getattr(existing, field):
                 setattr(existing, field, (getattr(existing, field) + "\n\n" + value).strip())
+    for note in merged.values():
+        note.tags = normalize_tags(note.tags)
     return list(merged.values())
 
 
@@ -61,6 +67,10 @@ def extract_knowledge(pages, document, llm_service, progress=None):
     chunks = build_chunks(pages)
     if not chunks:
         raise ValueError("Die PDF enthält keinen extrahierbaren Text. Eine Texterkennung ist noch nicht verfügbar.")
+    existing_tags = []
+    for row in load_notes(course=document["course"]):
+        metadata, _ = load_note(row["markdown_path"])
+        existing_tags.extend(metadata.get("tags", []))
     notes = []
     for index, chunk in enumerate(chunks, start=1):
         if progress:
@@ -72,7 +82,8 @@ def extract_knowledge(pages, document, llm_service, progress=None):
             "Nicht eine Note pro Seite, sondern eine pro fachlichem Konzept. Schreibe auf Deutsch. "
             "Erkläre zentrale Konzepte und prüfungsrelevante Aspekte, ohne konkrete Prüfungen zu behaupten. "
             "Beispiele und typische Fehler nur, wenn aus dem Inhalt sinnvoll ableitbar; sonst leer lassen. "
-            "Tags: kurze kleingeschriebene Begriffe, keine Sätze oder Duplikate. "
+            "Tags: maximal fünf kurze Fachbegriffe mit jeweils ein bis drei Wörtern; "
+            "kleingeschrieben, keine Sätze, keine unnötig spezifischen Formulierungen oder Duplikate. "
             "Schwierigkeit easy/medium/hard beschreibt das Konzept für Studierende. "
             "source_pages dürfen nur relevante page-Werte aus diesem Abschnitt enthalten. "
             "Fasse verwandte Aussagen zusammen. Verwende für dasselbe Konzept einen bereits bekannten "
@@ -92,6 +103,8 @@ def extract_knowledge(pages, document, llm_service, progress=None):
             for note in response.notes:
                 if not set(note.source_pages).issubset(allowed_pages):
                     raise ValueError("Quellseiten liegen außerhalb des bereitgestellten Abschnitts.")
+                note.tags = normalize_tags(note.tags, existing_tags)
+                existing_tags.extend(note.tags)
                 notes.append(KnowledgeNote(
                     **note.model_dump(), course=document["course"] or "Ohne Kurs",
                     source_file=document["filename"],

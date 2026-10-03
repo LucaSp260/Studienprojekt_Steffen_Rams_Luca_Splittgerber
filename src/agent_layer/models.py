@@ -22,7 +22,7 @@ class StrictModel(BaseModel):
 
 class ExerciseRequest(StrictModel):
     course: NonEmpty
-    topic: NonEmpty
+    topic: str = ""
     count: int = Field(ge=1, le=20)
     difficulty: RequestedDifficulty
     exercise_type: ExerciseType
@@ -30,14 +30,14 @@ class ExerciseRequest(StrictModel):
 
 class ExamRequest(StrictModel):
     course: NonEmpty
-    duration_minutes: int = Field(ge=10, le=300)
+    duration_minutes: int | None = Field(default=None, ge=10, le=300)
     task_count: int = Field(ge=1, le=20)
     difficulty: RequestedDifficulty
     focus: str = ""
 
     @model_validator(mode="after")
     def enough_time(self):
-        if self.duration_minutes < self.task_count:
+        if self.duration_minutes is not None and self.duration_minutes < self.task_count:
             raise ValueError("Die Dauer muss mindestens eine Minute pro Aufgabe erlauben.")
         return self
 
@@ -119,7 +119,7 @@ class ExamTask(StructuredAnswersMixin, StrictModel):
     exercise_type: ExerciseType
     choices: list[NonEmpty] = Field(default_factory=list)
     points: int = Field(gt=0)
-    estimated_minutes: int = Field(gt=0)
+    estimated_minutes: int | None = Field(default=None, gt=0)
     solution: str
     explanation: str
     short_answer_items: list[ShortAnswerItem] = Field(default_factory=list)
@@ -136,7 +136,7 @@ class ExamTask(StructuredAnswersMixin, StrictModel):
 class ExamDraft(StrictModel):
     title: NonEmpty
     course: NonEmpty
-    duration_minutes: int = Field(gt=0)
+    duration_minutes: int | None = Field(default=None, gt=0)
     tasks: list[ExamTask] = Field(min_length=1)
     total_points: int = Field(gt=0)
 

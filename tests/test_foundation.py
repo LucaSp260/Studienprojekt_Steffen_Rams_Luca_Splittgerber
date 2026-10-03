@@ -38,7 +38,7 @@ class FoundationTests(unittest.TestCase):
             self.assertEqual(tables, {
                 'chats', 'messages', 'documents', 'exams', 'knowledge_notes', 'generated_artifacts',
                 'brain_concepts', 'brain_edges', 'brain_concept_sources', 'brain_edge_sources',
-                'brain_proposals', 'brain_note_processing', 'llm_usage',
+                'brain_proposals', 'brain_note_processing', 'llm_usage', 'courses',
             })
             self.assertEqual(connection.execute('PRAGMA foreign_keys').fetchone()[0], 1)
             with self.assertRaises(sqlite3.IntegrityError):
@@ -73,7 +73,7 @@ class FoundationTests(unittest.TestCase):
         self.assertEqual(restarted.chat_message[0].markdown[0].value, 'Zweiter Chat')
         restarted.button(key=f'chat_{first_id}').click().run()
         self.assertEqual(restarted.chat_message[0].markdown[0].value, 'Erste Nachricht')
-        for page in ['Unterlagen', 'Wissensbasis', 'Einstellungen']:
+        for page in ['Unterlagen', 'Generierte Notes', 'Einstellungen']:
             restarted.radio[0].set_value(page).run()
             self.assertEqual(len(restarted.exception), 0)
 

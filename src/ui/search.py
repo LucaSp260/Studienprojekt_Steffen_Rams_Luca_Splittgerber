@@ -25,16 +25,6 @@ def show_search():
         st.session_state.search_collection = identity
     st.caption(f"Suchmodell: {PROVIDER_LABELS[config.provider]} · {config.model}. "
                'Indexierung und Suche senden Texte an diesen Anbieter und können API-Kosten verursachen.')
-    if st.button('Vorhandene Themen indexieren', key='index_existing'):
-        try:
-            with st.spinner('Wissensbasis für die Suche vorbereiten …'):
-                result = index_existing_notes()
-            st.success(f"{result['indexed']} Themen indexiert, {result['skipped']} bereits aktuell.")
-            st.session_state.pop('search_results', None)
-        except (EmbeddingError, SearchError, ValueError) as error:
-            st.error(str(error))
-        except (OSError, sqlite3.Error):
-            st.error('Indexierung fehlgeschlagen. Markdown-Dateien und lokale Datenbank prüfen.')
     courses = sorted({row['course'] or 'Ohne Kurs' for row in load_notes()})
     with st.form('semantic_search'):
         query = st.text_input('Wonach möchtest du suchen?')

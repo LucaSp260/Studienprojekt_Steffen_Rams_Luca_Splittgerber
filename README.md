@@ -8,8 +8,8 @@ Lokales MVP eines universitären Studienprojekts: Der AI Learning Companion mach
 flowchart LR
     D[Data Layer: Original-PDFs] --> K[Knowledge Base Layer: Notes + ChromaDB]
     K --> C[Connection Agent: Konzept- und Beziehungsvorschläge]
-    C --> H[Menschliche Prüfung]
-    H --> G[Bestätigter Wissensgraph + Obsidian]
+    C --> G[Persistenter Wissensatlas]
+    G --> O[Optionaler Obsidian-Export]
     K --> A[Agentic Layer: Lernchat, Exercise, Exam und Critic]
 ```
 
@@ -27,26 +27,28 @@ Ein eigener Python-Pfad kann mit `setup.bat "C:\Pfad\zu\python.exe"` gewählt we
 
 ## Ein PDF in die Wissensbasis übernehmen
 
-1. Unter **Einstellungen** OpenAI oder Google Gemini wählen, API-Key und Modellname angeben. **Speichern** übernimmt die Auswahl; **Verbindung testen** führt eine kurze echte Modellanfrage aus.
-2. Unter **Unterlagen** einen Kurs eingeben, PDFs auswählen und **Unterlagen hinzufügen** klicken.
-3. Unter **Wissensbasis** beim gewünschten PDF **In Wissensbasis verarbeiten** anklicken. Der Fortschritt zeigt die bearbeiteten Abschnitte.
-4. Danach ein Thema öffnen: Inhalt, Tags, Schwierigkeit, Originaldatei und Quellseiten werden ohne YAML-Syntax angezeigt.
+1. Unter **Einstellungen** OpenAI oder Google Gemini wählen, API-Key und Modellname angeben. **Speichern** übernimmt die Auswahl. Der Verbindungsstatus und **Verbindung testen** prüfen ausschließlich Modellmetadaten, ohne Textgenerierung.
+2. Unter **Unterlagen** einen bestehenden Kurs auswählen oder **+ Neuen Kurs anlegen** wählen, einen Namen eingeben, PDFs auswählen und **Unterlagen hinzufügen** klicken.
+3. **Unterlagen hinzufügen** speichert neue PDFs und startet direkt ihre Verarbeitung. Neue Notes werden automatisch eingebettet und indexiert; anschließend wächst der Wissensatlas inkrementell. Doppelte Uploads starten keine erneute Verarbeitung. Bei einem Fehler bleibt das Dokument gespeichert und kann über **Verarbeitung fortsetzen** weiterverarbeitet werden.
+4. Unter **Generierte Notes** eine Note öffnen. **Generierte Notes** bietet einen Kursfilter (standardmäßig **Alle Kurse**), Inhalt, Tags, Schwierigkeit, Originaldatei und Quellseiten.
 
-Bei der Verarbeitung wird der extrahierte PDF-Text an den gewählten Anbieter gesendet. API-Aufrufe können Kosten verursachen. Sie erfolgen ausschließlich beim Verbindungstest oder durch eine ausdrücklich ausgelöste Verarbeitung, Indexierung, Suche, Lernfrage oder Generierung. Navigation, das Öffnen alter Chats und normale Streamlit-Neuläufe senden keine Anfrage. Bereits verarbeitete PDFs werden nicht erneut verarbeitet; Reprocessing ist nicht enthalten.
+**Meine Unterlagen** zeigt PDFs nach Kurs gruppiert. Über **PDF löschen** und die anschließende Bestätigung werden das PDF, seine Knowledge Notes und deren Chroma-Einträge entfernt. Im Wissensatlas bleiben gemeinsam belegte Konzepte und Beziehungen mit ihren übrigen Belegen erhalten; nicht mehr belegte Elemente verschwinden. Ein vorhandener Obsidian-Export des Kurses wird aktualisiert. Frühere Chats und Lerninhalte bleiben lesbar und kennzeichnen Quellen aus gelöschten PDFs als nicht mehr verfügbar. Das Löschen ruft weder LLM noch Embedding-Provider auf.
+
+Bei der Verarbeitung wird der extrahierte PDF-Text an den gewählten Anbieter gesendet. API-Aufrufe können Kosten verursachen. Generative und Embedding-Aufrufe erfolgen bei ausdrücklich ausgelöster Dokumentverarbeitung, Lernfragen oder Generierung. Nur Einstellungen prüfen zusätzlich Modellmetadaten; Ergebnisse sind für fünf Minuten pro Provider, Modell und Schlüsselidentität gecacht. Das Öffnen alter Chats und Notes löst keine generative Anfrage aus. Bereits verarbeitete PDFs werden nicht erneut verarbeitet; Reprocessing ist nicht enthalten.
 
 ## Second Brain und Wissensatlas
 
 1. Verarbeite zuerst PDF-Unterlagen zu Knowledge Notes.
 2. Nach erfolgreicher Indexierung erweitert die App den Atlas automatisch: Neue Notes werden miteinander und mit höchstens fünf semantisch relevanten alten Notes je neuer Note verglichen. Insgesamt gelangen höchstens zwölf alte Notes in den Connection-Agent-Kontext. Bestehende Konzepte und Beziehungen werden nicht neu erzeugt. Dieser Schritt kann zusätzliche API-Kosten verursachen.
-3. Öffne **Second Brain**. Die Gesamtansicht zeigt alle Konzepte und Beziehungen ohne Kantenlabels; ein Schalter blendet sie ein. Die Fokusansicht zeigt ein auswählbares Konzept und seine Nachbarn über einen oder zwei Hops mit direkt sichtbaren Beziehungskategorien. Hover/Klick zeigt Begründung, Belege, Herkunft und Review-Status.
-4. Automatisch ergänzte Beziehungen sind **KI-generiert** und sofort sichtbar. Bestehende übernommene und manuelle Beziehungen bleiben **Nutzerbestätigt**. Beziehungen lassen sich später bearbeiten oder löschen; das Speichern einer Bearbeitung bestätigt die betreffende KI-Kante. Der bisherige Button **Verbindungen mit dem Agenten vorschlagen** bleibt für eine bewusst manuell ausgelöste Analyse mit anschließender Vorschlagsprüfung verfügbar.
-5. Unter **In Obsidian öffnen → Obsidian-Export aktualisieren** entsteht ein kursbezogener Vault unter `knowledge_base/Second Brain/`. Exportierte Beziehungen tragen ihren Status im Markdown. Öffne den angezeigten Ordner in Obsidian als Vault und nutze **Graph View**.
+3. Öffne **Wissensatlas**. Die Gesamtansicht zeigt alle Konzepte und Beziehungen ohne Kantenlabels; ein Schalter blendet sie ein. Die Fokusansicht zeigt ein auswählbares Konzept und seine Nachbarn über einen oder zwei Hops mit direkt sichtbaren Beziehungskategorien. Hover/Klick zeigt Begründung, Belege, Herkunft und Review-Status.
+4. Automatisch ergänzte Beziehungen sind **KI-generiert** und sofort sichtbar. Bestehende übernommene und manuelle Beziehungen bleiben **Nutzerbestätigt**. Beziehungen lassen sich später bearbeiten oder löschen; das Speichern einer Bearbeitung bestätigt die betreffende KI-Kante. Die normale Oberfläche bietet keine Vollkurs-Analyse und keinen zusätzlichen Connection-Agent-Button. Technische Vorschlags- und Review-Funktionen bleiben intern erhalten.
+5. Unter **Optionaler Obsidian-Export → Obsidian-Export aktualisieren** entsteht ein kursbezogener Vault unter `knowledge_base/Second Brain/`. Exportierte Beziehungen tragen ihren Status im Markdown. Öffne den angezeigten Ordner in Obsidian als Vault und nutze **Graph View**.
 
 Obsidian ist eine Visualisierung und externe Lesekopie. Die App bleibt die führende Wissensbasis. Offene und abgelehnte Vorschläge werden nicht als Verbindungen exportiert. Änderungen in Obsidian werden nicht in die App zurückimportiert.
 
-Der Streamlit-Atlas zeigt zunächst ein Konzept und seine direkten Nachbarn. Über **Graph-Fokus** kann ein anderes Konzept oder der gesamte Atlas gewählt werden. Mausrad und Schaltflächen zoomen; Ziehen verschiebt den Graphen oder einzelne Knoten. Hover und Klick zeigen Quellen, Beschreibung und Begründung. **Beleg-Notes im Graphen anzeigen** ergänzt orange Note-Knoten zu den blauen Konzepten. Frühere Beziehungen behalten ihren ursprünglichen Typ; ihre bisherige Begründung steht zusätzlich als Beschreibung bereit, bis sie fachlich präzisiert werden.
+Der Streamlit-Atlas startet in der **Gesamtansicht**. Die **Fokusansicht** bietet **Graph-Fokus** für ein Konzept und seine direkten Nachbarn (optional zwei Hops). Ein Knotenklick wählt das Konzept und zeigt kompakte Details und Bearbeitungsaktionen unter dem Graphen. Mausrad und Schaltflächen zoomen; Ziehen verschiebt den Graphen oder einzelne Knoten. Hover und Klick zeigen Quellen, Beschreibung und Begründung. **Beleg-Notes im Graphen anzeigen** ergänzt orange Note-Knoten zu den blauen Konzepten. Frühere Beziehungen behalten ihren ursprünglichen Typ; ihre bisherige Begründung steht zusätzlich als Beschreibung bereit, bis sie fachlich präzisiert werden.
 
-Die Review-Historie vergleicht den ursprünglichen Agentenvorschlag mit der übernommenen Fassung und zählt unveränderte Übernahmen, Anpassungen und Ablehnungen. Diese Kennzahlen zeigen menschliche Korrekturarbeit, aber ohne fachlich gelabelten Referenzdatensatz keine objektive Wahrheitsquote.
+Konzepte lassen sich lokal umbenennen und beschreiben; bestätigtes Löschen entfernt nur das Konzept und seine Graph-Kanten. Beziehungen lassen sich ansehen, bearbeiten und nach Bestätigung löschen. Knowledge Notes, Chroma und PDFs bleiben davon unberührt. Beschreibungen werden während des ohnehin stattfindenden Connection-Agent-Aufrufs erstellt; für ältere Konzepte verwendet die UI eine kurze lokale Zusammenfassung vorhandener Informationen. Knotenklicks benötigen keine API. Der frühere Prüfverlauf und manuelle Ergänzungsbereiche werden in der normalen UI nicht angezeigt; bestehende Historieneinträge bleiben gespeichert.
 
 ## Anbieter und lokale Einstellungen
 
@@ -64,7 +66,7 @@ Die Implementierung folgt den offiziellen SDKs und Dokumentationen: [OpenAI Stru
 - Python prüft Pflichtfelder, Schwierigkeit, Tags und Seitenzahlen. Quellseiten müssen im jeweiligen Textabschnitt liegen. Kurs und Originaldateiname werden aus SQLite übernommen. Fachliche Richtigkeit und die genaue inhaltliche Zuordnung sollten anhand der angegebenen Quelle geprüft werden.
 - Notes liegen in `knowledge_base/<kurs>/*.md`, mit Titel, Kurs, Thema, Tags, Schwierigkeit, Quelle, Seiten und verwandten Themen im YAML-Frontmatter. SQLite registriert sie in `knowledge_notes` mit Dokumentbezug und relativem Markdown-Pfad.
 - Für neue Dokumente wird `documents.processed = 1` erst nach Markdown, SQLite und erfolgreicher Indexierung gesetzt. Schreibfehler vor dem SQLite-Commit werden zurückgenommen. Bei späteren Embedding-/Chroma-Fehlern bleiben die Notes erhalten, das Dokument bleibt unverarbeitet. Der nächste Versuch indexiert die vorhandenen Notes ohne erneute Knowledge Extraction. PDFs ohne Text können gespeichert, aber ohne OCR nicht in Notes umgewandelt werden.
-- `brain_note_processing` merkt sich abgeschlossene Connection-Analysen. Bei der einmaligen Migration werden vorhandene Notes als Bestand markiert, damit sie nicht nachträglich kostenpflichtig analysiert werden. Scheitert nur der Connection-Schritt, bleiben die indexierten Notes erhalten und er kann unter **Bereits verarbeitete Dokumente** ohne neue Extraction erneut gestartet werden. `brain_edges.review_status` unterscheidet KI-generierte von nutzerbestätigten Beziehungen; `llm_usage` speichert Anbieter, Modell, Operation, Zeitpunkt und nur tatsächlich gelieferte Tokenwerte.
+- `brain_note_processing` merkt sich abgeschlossene Connection-Analysen. Bei der einmaligen Migration werden vorhandene Notes als Bestand markiert, damit sie nicht nachträglich kostenpflichtig analysiert werden. Scheitert nur der Connection-Schritt, bleiben die indexierten Notes erhalten und er kann unter **Unterlagen** ohne neue Extraction erneut gestartet werden. `brain_edges.review_status` unterscheidet KI-generierte von nutzerbestätigten Beziehungen; `llm_usage` speichert Anbieter, Modell, Operation, Zeitpunkt und nur tatsächlich gelieferte Tokenwerte.
 
 Datenbank und fehlende Tabellen werden beim Start automatisch angelegt, bestehende Daten bleiben erhalten. PDFs, Chats und Notes überstehen normale Neustarts. Die Anwendung ist für eine lokale Streamlit-Instanz vorgesehen; eine Verarbeitungssperre schützt vor gleichzeitigen Klicks in deren Browsersitzungen. Ein harter Prozessabbruch während des Schreibens kann unregistrierte Markdown-Dateien zurücklassen; bestehende Dateien werden auch dann nicht überschrieben. Zeitstempel in SQLite sind UTC.
 
@@ -87,8 +89,8 @@ Retrieval → Generator → Critic → gegebenenfalls eine Revision → Final
 ```
 
 - Der **Exercise Agent** bildet aus Kurs, Thema, Anzahl, Schwierigkeit und Aufgabentyp eine Retrieval-Anfrage. Er verwendet standardmäßig höchstens fünf Notes und erzeugt Aufgaben mit Musterlösung, Erklärung und Quellen.
-- Der **Exam Agent** erstellt aus mehreren gefundenen Notes eine Probeklausur mit Punkten und Lösungen. Bei gemischter Schwierigkeit verteilt eine lokale Funktion ungefähr 20 % leicht, 50 % mittel und 30 % schwer nach dem Verfahren des größten Rests. Eine getrennte Zeitheuristik bewertet Aufgabentyp, Schwierigkeit, Teilaufgaben, Text- und Antwortumfang, Begründungs- und Transferanteil; Punkte wirken nur als kleiner zusätzlicher Faktor. Die Zeiten werden nicht auf die Wunschdauer skaliert. Der Generator und die einzige mögliche Critic-Revision müssen den tatsächlichen Aufgabenumfang in einen Zielbereich von ungefähr ±7 % bringen.
-- Der **Critic Agent** prüft Grounding, Lösung, Klarheit, Schwierigkeit, Redundanz und Quellen. Bei Klausuren prüft er zusätzlich Vielfalt, Punkte, Einzelzeiten und Gesamtdauer. Ist eine Klausur zu kurz oder zu lang, muss die Revision Aufgaben oder Teilfragen fachlich erweitern beziehungsweise kürzen. Er darf höchstens eine vollständig überarbeitete Fassung liefern; es gibt keine Agentenschleife. Schlägt die Prüfung fehl, wird der Entwurf sichtbar als ungeprüft markiert.
+- Der **Exam Agent** erstellt aus mehreren semantisch gefundenen Notes eine Probeklausur mit Aufgaben, Punkten und Lösungen. Die neue Oberfläche benötigt keine Minutendauer; Generator und Critic optimieren keine Aufgaben an Zeitvorgaben. Alte gespeicherte Klausuren mit Dauer bleiben lesbar. Die interne optionale Unterstützung expliziter historischer Duration-Konfigurationen bleibt für Rückwärtskompatibilität erhalten.
+- Der **Critic Agent** prüft Grounding, Lösung, Klarheit, Schwierigkeit, Redundanz und Quellen; bei neuen Klausuren zusätzlich Vielfalt und Punkte. Er darf höchstens eine vollständig überarbeitete Fassung liefern; es gibt keine Agentenschleife. Schlägt die Prüfung fehl, wird der Entwurf sichtbar als ungeprüft markiert.
 
 Aufgaben besitzen optional strukturierte Teilaufgaben. Jede Teilaufgabe, Kurzantwort und Erklärung trägt dieselbe ID, zum Beispiel `a`, `b`, `c` oder `1`, `2`, `3`. Pydantic verwirft Ergebnisse, wenn IDs oder Reihenfolge zwischen `subtasks`, `short_answer_items` und `explanation_items` abweichen. Die UI zeigt jedes Element in einem eigenen Absatz. Bei Aufgaben ohne Teilaufgaben bleiben `solution` und `explanation` die beiden Lösungsebenen. Alte Artefakte ohne die neuen Listen bleiben über diese bisherigen Felder lesbar.
 
@@ -96,19 +98,19 @@ Vor dem Modellaufruf erhalten Retrieval-Treffer lokale IDs wie `SOURCE_1`. Das M
 
 Das ist mehr als ein einzelner LLM-Prompt: Die Inhalte stammen aus der persistenten persönlichen Knowledge Base, werden gezielt semantisch abgerufen, auf diese Quellen begrenzt, strukturiert validiert und anschließend durch einen spezialisierten zweiten Agenten geprüft. Fertige Übungen und Klausuren liegen als JSON in SQLite in `generated_artifacts` und können unter **Meine Inhalte** nach einem Neustart ohne API-Aufruf wieder geöffnet werden.
 
-## Semantische Suche
+## Semantisches Retrieval und Embeddings
 
-1. Unter **Einstellungen** das separate **Embedding-Modell** prüfen und speichern. Das vorhandene LLM `gpt-5.6-luna` bleibt für Textgenerierung zuständig.
-2. Auf **Wissensbasis** einmal **Vorhandene Themen indexieren** klicken. Bestehende Notes werden aus Markdown gelesen, nicht neu durch ein LLM erzeugt. Unveränderte Einträge werden übersprungen; geänderte Dateien werden beim expliziten Indexieren aktualisiert.
-3. Unter **Wissensbasis durchsuchen** eine Frage eingeben, optional einen Kurs wählen und **Suchen** anklicken. Standardmäßig erscheinen die fünf ähnlichsten Notes (`top_k=5`), bei weniger passenden Einträgen entsprechend weniger. Quellen und physische PDF-Seiten bleiben sichtbar. Die Reihenfolge basiert auf Kosinusdistanz, nicht auf erfundenen Prozentwerten.
+Neue Notes werden automatisch indexiert. Der manuelle Indexierungsbutton ist aus der Benutzeroberfläche entfernt; `index_existing_notes` bleibt intern für gezielte Reparaturen und Migrationen vorhanden und wird beim Start nicht automatisch auf den Bestand angewendet.
 
-Standards in `src/llm/config.py`: OpenAI `text-embedding-3-small`, Gemini `gemini-embedding-2`, jeweils 768 Dimensionen. `.env` speichert `OPENAI_EMBEDDING_MODEL` und `GEMINI_EMBEDDING_MODEL` getrennt von den LLM-Modellen. Anbieter und Key werden aus der vorhandenen Konfiguration übernommen. Der Button **Verbindung testen** prüft weiterhin nur das LLM.
+Standards in `src/llm/config.py`: OpenAI `text-embedding-3-small`, Gemini `gemini-embedding-2`, jeweils 768 Dimensionen. Bereits gespeicherte kompatible Embedding-Modelle aus `.env` werden weiterverwendet. Die normale Einstellungsseite bietet kein Embedding-Modellfeld und speichert diese interne Konfiguration unverändert.
+
+**Bewusst kein Graph-RAG:** Lernchat, Übungen und Probeklausuren verwenden ausschließlich die vorhandene semantische Vorauswahl von Knowledge Notes. Es werden weder Graphnachbarn noch zusätzliche Notes aus dem Wissensatlas in den Generierungskontext aufgenommen. Der Graph dient Strukturierung, Exploration, Visualisierung und Quellen-Navigation. Das hält Retrieval und Tokenverbrauch begrenzt.
 
 Der Suchtext enthält Titel, Thema, Tags und den fachlichen Markdown-Inhalt, keine technischen YAML-Felder. Sehr lange Notes werden in Abschnitte von höchstens 6.000 UTF-8-Bytes eingebettet; deren längengewichtetes Mittel ergibt einen normalisierten Vektor je Note. Es wird kein Inhalt still abgeschnitten.
 
 **SQLite** verwaltet Chats, Dokumentstatus und Note-Zuordnung. **Markdown** bleibt die vollständige Wissensrepräsentation. **ChromaDB** speichert nur Suchvektoren und Metadaten lokal unter `chroma_db/`, ohne externen Server oder Cloud-Account. ChromaDB ist Infrastruktur des Knowledge Base Layers, kein zusätzlicher fachlicher Layer. Der Ordner bleibt von Git ausgeschlossen.
 
-Jede Kombination aus Provider, Embedding-Modell, Dimension und Indexformat erhält eine eigene Collection. Stabile IDs wie `knowledge_note_7` und Upserts verhindern Duplikate. Nach Modellwechsel **Vorhandene Themen indexieren** erneut ausführen; der frühere Index bleibt erhalten. Der Dokumentstatus dokumentiert eine abgeschlossene Verarbeitung; die Suchabdeckung ist vom aktuell gewählten Modell abhängig. App-Start und Streamlit-Neuläufe lösen keine Embedding-Anfragen aus.
+Jede Kombination aus Provider, Embedding-Modell, Dimension und Indexformat erhält eine eigene Collection. Stabile IDs wie `knowledge_note_7` und Upserts verhindern Duplikate. Eine bewusst technisch durchgeführte Embedding-Modellmigration kann intern `index_existing_notes` verwenden; der frühere Index bleibt erhalten. Der Dokumentstatus dokumentiert eine abgeschlossene Verarbeitung; die Suchabdeckung ist vom aktuell gewählten Modell abhängig. App-Start und Streamlit-Neuläufe lösen keine Embedding-Anfragen aus.
 
 Technische Quellen: [OpenAI Embeddings](https://developers.openai.com/api/docs/guides/embeddings), [Gemini Embeddings](https://ai.google.dev/gemini-api/docs/embeddings), [Chroma Collections](https://docs.trychroma.com/docs/collections/manage-collections).
 
@@ -172,3 +174,35 @@ Der kleine echte Phase-6-Check stellt eine Hauptfrage und eine Anschlussfrage an
 ```
 
 Der Lauf verursacht je Frage genau einen Retrieval- und einen LLM-Aufruf. Vorhandene PDFs, Notes, Übungen und Klausuren werden nur gelesen und nicht erneut erzeugt.
+
+## Lokale Verwaltung und Datenintegrität
+
+Die Sidebar zeigt Navigation vor einer separat scrollbar gehaltenen Chatliste. **Chat hinzufügen** startet einen persistenten Chat. Pins überleben Neustarts; angepinnte Chats stehen zuerst, danach folgt die letzte Aktivität. Eine bestätigte Chat-Löschung entfernt zugehörige Nachrichten; unabhängige Lernartefakte, Notes und PDFs bleiben erhalten. Alte chatbezogene Klausuren verlieren nur ihre Chatzuordnung.
+
+Lernmodus und Kurs liegen im nativen `st.bottom`-Bereich direkt oberhalb des Chat-Inputs und bleiben bei langen Chats erreichbar. **Meine Inhalte** nutzt denselben Kursfilter mit **Alle Kurse** als Standard. Das Löschen eines einzelnen Artefakts erfordert eine Bestätigung. Die Quellenanzeige zeigt weiterhin Original-PDF-Seiten; interne RAG-Kontextblöcke werden nicht angezeigt.
+
+Neue Notes besitzen maximal fünf Tags mit jeweils höchstens drei Wörtern. Lokale Normalisierung vereinheitlicht Unicode, Groß-/Kleinschreibung und Trennzeichen, entfernt lange Tags und Duplikate und verwendet eindeutige vorhandene Tags desselben Kurses wieder. Die Tagliste wird nicht zusätzlich an das LLM geschickt. Alte Notes werden nicht rückwirkend bereinigt und es gibt keinen separaten Tag-LLM-Aufruf.
+
+`courses` ergänzt SQLite minimal um bekannte Kursnamen. Neue Namen werden getrimmt und gegen Case-Duplikate geprüft. **Unterlagen → Kurs umbenennen** aktualisiert Dokumentzuordnungen, Markdown-Frontmatter, alle lokalen Chroma-Collections (nur Metadaten und Hash), Konzepte/Vorschläge, gespeicherte Inhaltskonfigurationen und Chat-Kursfilter. Stabile Dokument-/Note-IDs und Dateipfade bleiben erhalten. `brain_note_processing` und Usage-Daten bleiben erhalten. Bereits vorhandene Obsidian-Vaults werden lokal zur neuen Kurszuordnung verschoben; ein Export aktualisiert weiterhin den sichtbaren Stand.
+
+Vor der Pin-Migration und vor jeder Kursumbenennung entsteht eine mit der SQLite-Backup-API erstellte Sicherung unter `data/*.before-*.db`. Kursumbenennung sperrt parallele lokale Verarbeitung/Indexierung, verwendet `BEGIN IMMEDIATE`, atomare Markdown-Ersetzung und eine Rücknahme von Dateien und Chroma-Metadaten bei Fehlern. SQLite, Dateisystem und Chroma unterstützen zusammen keine echte gemeinsame ACID-Transaktion: ein harter Prozessabbruch zwischen diesen Schritten bleibt ein Wiederherstellungsfall für die Sicherung. Zielkurse werden niemals automatisch zusammengeführt. Normale UI-Aktionen berechnen keine Embeddings neu.
+
+Der Verbindungsstatus nutzt [OpenAI Modellmetadaten](https://developers.openai.com/api/reference/resources/models/methods/retrieve) beziehungsweise [Gemini Modellmetadaten](https://ai.google.dev/api/models). Eine erfolgreiche Abfrage bestätigt Erreichbarkeit und Modellzugriff, aber nicht verfügbares Guthaben oder jede Generierungsfunktion. Fehler werden ohne rohe Providerantworten angezeigt. Es findet keine generative Testanfrage statt.
+
+PDFs werden weiterhin ausschließlich als PyMuPDF-Text verarbeitet. OCR, Vision und Diagrammanalyse sind mögliche spätere Erweiterungen und in dieser Version nicht implementiert. Die Drei-Layer-Architektur bleibt erhalten.
+
+
+Übungen können ohne **Thema oder Beschreibung** erstellt werden. Dann verwendet das
+begrenzte semantische Retrieval zentrale Inhalte des ausgewählten Kurses; es gibt
+keinen zusätzlichen KI-Aufruf zur Themenauswahl. **Meine Inhalte** gruppiert gespeicherte
+Klausuren unter **Übungsklausuren** und einzelne Übungssets unter **Übungsaufgaben**.
+
+Beim ausgewählten Atlas-Konzept werden die Original-PDF-Seiten seiner belegenden
+Notes angeboten, nach Dokument zusammengefasst und ohne doppelte Seiten. Die Anzeige
+verwendet dieselbe lokale PDF-Vorschau wie der Lernchat und löst keinen LLM-Aufruf aus.
+
+Die deutsche Oberfläche setzt zentral lang="de" und translate="no" sowie den
+Browser-Übersetzungsschutz. Dadurch sollen automatische Übersetzer keine von React
+verwalteten Texte ersetzen (vertauschte Überschriften / removeChild-Fehler).
+Wenn eine offene Seite bereits durch Browserübersetzung beschädigt wurde, die Seite
+einmal vollständig neu laden und gegebenenfalls „Original anzeigen“ wählen.

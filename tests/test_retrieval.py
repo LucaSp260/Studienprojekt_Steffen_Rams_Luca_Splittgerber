@@ -239,23 +239,27 @@ class RetrievalTests(unittest.TestCase):
             return index_existing_notes(embedding_service=self.embeddings)
         def search_action(query, top_k, course):
             return retrieve(query,top_k,course,embedding_service=self.embeddings)
-        with patch('src.ui.search.index_existing_notes',side_effect=index_action), patch('src.ui.search.retrieve',side_effect=search_action):
-            app=AppTest.from_file(str(ROOT/'app.py')).run(timeout=30)
-            app.radio[0].set_value('Wissensbasis').run()
-            app.run()
-            self.assertEqual(self.embeddings.document_calls,0)
-            self.assertEqual(self.embeddings.query_calls,0)
-            app.button(key='index_existing').click().run(timeout=30)
-            app.text_input[0].set_value('Architektur')
-            app.button(key='FormSubmitter:semantic_search-Suchen').click().run(timeout=30)
-            self.assertEqual(len(app.exception),0)
-            self.assertTrue(any('1. Architektur' in item.value for item in app.markdown))
-            app.run()
-            self.assertEqual(self.embeddings.query_calls,1)
-            self.assertEqual(self.embeddings.document_calls,1)
+        # Indexing remains a technical API, while Notes browsing is passive.
+        index_action()
+        app=AppTest.from_file(str(ROOT/'app.py')).run(timeout=30)
+        app.radio[0].set_value('Generierte Notes').run()
+        app.run()
+        self.assertEqual(len(app.exception),0)
+        self.assertNotIn('index_existing',[button.key for button in app.button])
+        self.assertEqual(self.embeddings.query_calls,0)
+        self.assertEqual(self.embeddings.document_calls,1)
 
 
 class EmbeddingTests(unittest.TestCase):
+    def setUp(self):
+        # SDK mocks still exercise Usage logging; never write to the user's DB.
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        isolated = patch.object(db, 'DATABASE_PATH', Path(self.temp.name)/'application.db')
+        isolated.start()
+        self.addCleanup(isolated.stop)
+        db.initialize_database()
+
     def test_service_normalizes_batches_and_long_text(self):
         service=EmbeddingService(config.EmbeddingConfig('openai','test','key',3))
         service._generate=Mock(side_effect=lambda texts,*args,**kwargs:[[3.,4.,0.] for _ in texts])
@@ -296,6 +300,10 @@ class EmbeddingTests(unittest.TestCase):
             args=client.models.embed_content.call_args.kwargs
             self.assertTrue(args['contents'][0].parts[0].text.startswith('task: search result'))
             self.assertIsNone(args['config'].task_type)
+        with closing(db.get_connection()) as connection:
+            usage = connection.execute('SELECT provider,input_tokens,total_tokens FROM llm_usage ORDER BY id').fetchall()
+        self.assertEqual([tuple(row) for row in usage], [('openai',None,None),('gemini',None,None)])
+        self.assertEqual(db.DATABASE_PATH.parent,Path(self.temp.name))
 
     def test_embedding_config_is_separate_and_persistent(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(config,'ENV_PATH',Path(directory)/'.env'):

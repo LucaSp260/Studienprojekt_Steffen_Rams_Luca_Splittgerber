@@ -172,22 +172,25 @@ class DocumentTests(unittest.TestCase):
     def test_upload_ui_and_restart(self):
         # AppTest unterstützt Datei-Uploads noch nicht als bedienbares Widget.
         # Nur die Dateiauswahl wird ersetzt; Formular, Speichern und UI laufen real.
-        with patch('src.ui.documents.st.file_uploader', return_value=[upload(self.pdf)]):
+        with patch('src.ui.documents.st.file_uploader', return_value=[upload(self.pdf)]), \
+             patch('src.ui.documents.process_document', return_value={'message':'Verarbeitet'}) as process:
             app = AppTest.from_file(str(ROOT / 'app.py')).run(timeout=30)
             app.radio[0].set_value('Unterlagen').run()
             app.text_input[0].set_value('Datenbanken')
             app.button(key='FormSubmitter:document_upload-Unterlagen hinzufügen').click().run()
             self.assertEqual(len(app.exception), 0)
             self.assertEqual(len(app.success), 1)
+            process.assert_called_once()
             self.assertEqual(len(self.files()), 1)
             restarted = AppTest.from_file(str(ROOT / 'app.py')).run(timeout=30)
             restarted.radio[0].set_value('Unterlagen').run()
-            self.assertIn('test.pdf – 2 Seiten', [item.value for item in restarted.text])
+            self.assertTrue(any('test.pdf' in item.value and '2 Seiten' in item.value for item in restarted.markdown))
             restarted.text_input[0].set_value('Datenbanken')
             restarted.button(key='FormSubmitter:document_upload-Unterlagen hinzufügen').click().run()
             self.assertTrue(any('bereits hochgeladen' in item.value for item in restarted.info))
             self.assertEqual(len(repository.load_documents()), 1)
             self.assertEqual(len(self.files()), 1)
+            process.assert_called_once()
 
 
 if __name__ == '__main__':
