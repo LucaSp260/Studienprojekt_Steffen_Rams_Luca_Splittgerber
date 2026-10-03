@@ -67,6 +67,7 @@ class LearningChatTests(unittest.TestCase):
         self.assertEqual(result["sources"][0]["source_pages"], [19, 20, 21])
         self.assertNotIn("SOURCE_", result["answer"])
         self.assertIn("ausschließlich", llm.calls[0][0])
+        self.assertIn("Mathematische Formeln müssen als korrektes LaTeX", llm.calls[0][0])
 
         chat_id = db.create_chat()
         db.save_chat_exchange(chat_id, "Was sind Business Capabilities?", result["answer"], result)
@@ -126,9 +127,18 @@ class LearningChatTests(unittest.TestCase):
             app = AppTest.from_file(str(ROOT / "app.py")).run(timeout=30)
             self.assertEqual(len(app.exception), 0)
             self.assertTrue(any("Alte Antwort" in item.value for item in app.markdown))
-            for page in ["Unterlagen", "Generierte Notes", "Einstellungen", "Lernen"]:
+            for page in ["Meine Inhalte", "Übung erstellen", "Probeklausur erstellen",
+                         "Unterlagen", "Generierte Notes", "Einstellungen", "Lernen"]:
                 app.radio[0].set_value(page).run()
             chat_agent.assert_not_called()
+
+    def test_formula_delimiters_render_as_streamlit_math(self):
+        from src.ui.learning import _render_math_markdown
+        source = r"Inline \(x^2\), display \[w_\ell=\frac{2\pi}{n}\] and [y_1=\cos(x)]."
+        rendered = _render_math_markdown(source)
+        self.assertIn("$x^2$", rendered)
+        self.assertIn("$$\nw_\\ell=\\frac{2\\pi}{n}\n$$", rendered)
+        self.assertIn("$y_1=\\cos(x)$", rendered)
 
 
 if __name__ == "__main__":

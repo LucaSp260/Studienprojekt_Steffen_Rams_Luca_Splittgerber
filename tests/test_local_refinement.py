@@ -102,9 +102,8 @@ class LocalDataTests(unittest.TestCase):
 
     def test_sidebar_chat_opens_chat_mode_from_history(self):
         app=AppTest.from_file(str(ROOT/'app.py')).run(timeout=30)
-        app.selectbox(key='learning_mode').set_value('Meine Inhalte').run()
+        app.radio(key='navigation').set_value('Meine Inhalte').run()
         app.button(key=f'chat_{self.chat}').click().run()
-        self.assertEqual(app.selectbox(key='learning_mode').value,'Lernchat')
         self.assertEqual(app.radio(key='navigation').value,'Lernen')
         self.assertEqual(len(app.exception),0)
 
@@ -224,7 +223,9 @@ class LocalDataTests(unittest.TestCase):
             self.assertEqual(len(app.exception),0)
             self.assertEqual(app.sidebar.radio[0].label,'Navigation')
             self.assertEqual(app.button(key='add_chat').label,'Chat hinzufügen')
-            self.assertTrue(any(widget.label=='Lernmodus' for widget in app.selectbox))
+            self.assertTrue({'Meine Inhalte', 'Übung erstellen', 'Probeklausur erstellen'}
+                            .issubset(set(app.radio(key='navigation').options)))
+            self.assertTrue(any(widget.label=='Kurs' for widget in app.selectbox))
             app.radio(key='navigation').set_value('Generierte Notes').run()
             self.assertIn('>Generierte Notes</h1>', next(item.value for item in app.get('html') if '<h1' in item.value))
             self.assertNotIn('index_existing',[b.key for b in app.button])
@@ -339,7 +340,7 @@ class LocalDataTests(unittest.TestCase):
         from src.persistence.artifact_repository import save_artifact
         save_artifact("exercise", "Ohne Notes", "Historischer Kurs", {}, {"title":"Ohne Notes","course":"Historischer Kurs","exercises":[]})
         app=AppTest.from_file(str(ROOT/'app.py')).run(timeout=30)
-        app.selectbox(key='learning_mode').set_value('Meine Inhalte').run()
+        app.radio(key='navigation').set_value('Meine Inhalte').run()
         self.assertIn('Historischer Kurs',app.selectbox(key='learning_course').options)
         app.selectbox(key='learning_course').set_value('Historischer Kurs').run()
         self.assertTrue(any('Ohne Notes' in item.label for item in app.button))
@@ -347,7 +348,7 @@ class LocalDataTests(unittest.TestCase):
 
     def test_new_exam_ui_has_no_duration(self):
         app=AppTest.from_file(str(ROOT/'app.py')).run(timeout=30)
-        app.selectbox(key='learning_mode').set_value('Probeklausur erstellen').run()
+        app.radio(key='navigation').set_value('Probeklausur erstellen').run()
         app.selectbox(key='learning_course').set_value('SWA').run()
         self.assertEqual(len(app.exception),0)
         self.assertNotIn('Dauer in Minuten',[item.label for item in app.number_input])

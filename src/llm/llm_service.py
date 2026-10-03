@@ -26,8 +26,11 @@ class LLMService:
         self.config = config
         self.provider = providers[config.provider](config)
 
-    def generate(self, prompt, response_model):
-        result = self.provider.generate(prompt, response_model)
+    def generate(self, prompt, response_model, images=None):
+        if images:
+            result = self.provider.generate(prompt, response_model, images=images)
+        else:
+            result = self.provider.generate(prompt, response_model)
         record_service_usage(self.config, getattr(self.provider, "last_usage", None), response_model)
         return result
 

@@ -43,7 +43,7 @@ class FakeService:
         self.connection_prompt = ""
         self.fail_connection = False
 
-    def generate(self, prompt, model):
+    def generate(self, prompt, model, images=None):
         if model.__name__ == "ExtractionResult":
             self.extractions += 1
             return {"notes": [note("Neu A").model_dump(exclude={"course", "source_file"}),
@@ -83,6 +83,8 @@ class BrainGrowthTests(unittest.TestCase):
             patch.object(document_manager, "USER_DATA_PATH", self.root / "user_data"),
             patch.object(knowledge_manager, "read_pdf", return_value={"pages": ["Architekturtext"],
                                                                      "text": "Architekturtext"}),
+            patch("src.knowledge_layer.knowledge_extractor.render_pdf_pages",
+                  side_effect=lambda _source, numbers: {number: b"synthetic page" for number in numbers}),
             patch.object(knowledge_manager, "index_existing_notes", side_effect=self.mark_indexed),
         ]
         for item in self.patches:

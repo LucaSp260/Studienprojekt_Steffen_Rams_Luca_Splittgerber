@@ -1,6 +1,7 @@
 """Offizielles Google-GenAI-SDK mit strukturierter Interactions-Antwort."""
 
 import httpx
+import base64
 from google import genai
 from google.genai import types
 from pydantic import ValidationError
@@ -12,7 +13,7 @@ class GeminiProvider(BaseProvider):
     def __init__(self, config):
         self.config = config
 
-    def generate(self, prompt, response_model):
+    def generate(self, prompt, response_model, images=None):
         self.last_usage = None
         try:
             with genai.Client(
@@ -21,9 +22,14 @@ class GeminiProvider(BaseProvider):
                     timeout=90000, retry_options=types.HttpRetryOptions(attempts=0)
                 ),
             ) as client:
+                request_input = prompt
+                if images:
+                    request_input = [{"type": "text", "text": prompt}]
+                    request_input.extend({"type": "image", "data": base64.b64encode(image).decode("ascii"),
+                                          "mime_type": "image/png"} for image in images)
                 response = client.interactions.create(
                     model=self.config.model,
-                    input=prompt,
+                    input=request_input,
                     system_instruction=SYSTEM_INSTRUCTION,
                     response_format={"type": "text", "mime_type": "application/json",
                                      "schema": response_model.model_json_schema()},

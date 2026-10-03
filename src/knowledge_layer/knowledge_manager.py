@@ -47,10 +47,8 @@ def process_document(document_id, llm_service=None, progress=None, embedding_ser
         if progress:
             progress("PDF wird analysiert …")
         pdf = read_pdf(source_path)
-        if not pdf["text"].strip():
-            raise ValueError("Die PDF enthält keinen extrahierbaren Text. Texterkennung ist noch nicht verfügbar.")
         service = llm_service if llm_service is not None else LLMService()
-        notes = extract_knowledge(pdf["pages"], document, service, progress)
+        notes = extract_knowledge(pdf["pages"], document, service, progress, pdf_source=source_path)
         if progress:
             progress("Knowledge Notes werden gespeichert …")
         with closing(get_connection()) as connection, connection:

@@ -1,6 +1,6 @@
 """Critic Agent: eine strukturierte Prüfung mit höchstens einer eingebetteten Revision."""
 
-from src.agent_layer.common import parse_model, sources_for_prompt, time_target_range
+from src.agent_layer.common import MATH_FORMAT_RULES, parse_model, sources_for_prompt, time_target_range
 from src.agent_layer.models import ExerciseCritique, ExamCritique
 
 
@@ -17,7 +17,7 @@ CRITIC_RULES = (
     "Die Erklärung muss mindestens einen zusätzlichen Zusammenhang, eine Abgrenzung, einen typischen "
     "Denkfehler oder einen Lernhinweis enthalten, der nicht nur die Kurzlösung umformuliert. "
     "Bei needs_revision liefere genau eine vollständig überarbeitete Fassung in revised_content. "
-    "Bei approved muss revised_content null sein. Erfinde keine Lehrinhalte oder Quellen."
+    "Bei approved muss revised_content null sein. Erfinde keine Lehrinhalte oder Quellen. " + MATH_FORMAT_RULES
 )
 
 

@@ -65,7 +65,7 @@ Die Implementierung folgt den offiziellen SDKs und Dokumentationen: [OpenAI Stru
 - Das Modell erzeugt thematische Notes statt einer Note pro Seite. Bereits erkannte Titel werden für einheitliche Bezeichnungen mitgegeben. Gleiche normalisierte Titel werden lokal zusammengeführt; Quellen und Inhalte bleiben dabei erhalten. Eine vollständige semantische Erkennung aller Synonyme ist nicht enthalten.
 - Python prüft Pflichtfelder, Schwierigkeit, Tags und Seitenzahlen. Quellseiten müssen im jeweiligen Textabschnitt liegen. Kurs und Originaldateiname werden aus SQLite übernommen. Fachliche Richtigkeit und die genaue inhaltliche Zuordnung sollten anhand der angegebenen Quelle geprüft werden.
 - Notes liegen in `knowledge_base/<kurs>/*.md`, mit Titel, Kurs, Thema, Tags, Schwierigkeit, Quelle, Seiten und verwandten Themen im YAML-Frontmatter. SQLite registriert sie in `knowledge_notes` mit Dokumentbezug und relativem Markdown-Pfad.
-- Für neue Dokumente wird `documents.processed = 1` erst nach Markdown, SQLite und erfolgreicher Indexierung gesetzt. Schreibfehler vor dem SQLite-Commit werden zurückgenommen. Bei späteren Embedding-/Chroma-Fehlern bleiben die Notes erhalten, das Dokument bleibt unverarbeitet. Der nächste Versuch indexiert die vorhandenen Notes ohne erneute Knowledge Extraction. PDFs ohne Text können gespeichert, aber ohne OCR nicht in Notes umgewandelt werden.
+- Für neue Dokumente wird `documents.processed = 1` erst nach Markdown, SQLite und erfolgreicher Indexierung gesetzt. Schreibfehler vor dem SQLite-Commit werden zurückgenommen. Bei späteren Embedding-/Chroma-Fehlern bleiben die Notes erhalten, das Dokument bleibt unverarbeitet. Der nächste Versuch indexiert die vorhandenen Notes ohne erneute Knowledge Extraction. Jede physische PDF-Seite wird lokal als Bild gerendert und zusammen mit dem Text an den ausgewählten multimodalen Anbieter übermittelt; dadurch können auch Scans, Abbildungen, Diagramme und handschriftliche Ergänzungen in derselben Knowledge Extraction berücksichtigt werden.
 - `brain_note_processing` merkt sich abgeschlossene Connection-Analysen. Bei der einmaligen Migration werden vorhandene Notes als Bestand markiert, damit sie nicht nachträglich kostenpflichtig analysiert werden. Scheitert nur der Connection-Schritt, bleiben die indexierten Notes erhalten und er kann unter **Unterlagen** ohne neue Extraction erneut gestartet werden. `brain_edges.review_status` unterscheidet KI-generierte von nutzerbestätigten Beziehungen; `llm_usage` speichert Anbieter, Modell, Operation, Zeitpunkt und nur tatsächlich gelieferte Tokenwerte.
 
 Datenbank und fehlende Tabellen werden beim Start automatisch angelegt, bestehende Daten bleiben erhalten. PDFs, Chats und Notes überstehen normale Neustarts. Die Anwendung ist für eine lokale Streamlit-Instanz vorgesehen; eine Verarbeitungssperre schützt vor gleichzeitigen Klicks in deren Browsersitzungen. Ein harter Prozessabbruch während des Schreibens kann unregistrierte Markdown-Dateien zurücklassen; bestehende Dateien werden auch dann nicht überschrieben. Zeitstempel in SQLite sind UTC.
@@ -74,13 +74,13 @@ Beim Neustart wird der zuletzt aktualisierte Chat samt gespeicherter Antworten u
 
 ## Lernchat
 
-Unter **Lernen → Lernchat** lassen sich Fragen zur persönlichen Wissensbasis stellen. Optional begrenzt ein Kursfilter die Suche. Der Chat ruft passende Notes über dasselbe semantische Retrieval wie die Wissensbasis-Suche ab, gibt dem Modell nur diese Inhalte und zeigt an jeder Antwort die tatsächlich verwendeten PDF-Dateien und Seiten. Eine Antwort ohne belegte Quelle wird nicht als wissensbasierte Antwort ausgegeben. Wenn die Wissensbasis nicht genügend Inhalt liefert, meldet der Chat das offen.
+Unter **Lernen** lassen sich Fragen zur persönlichen Wissensbasis stellen. Die direkt erreichbaren Sidebar-Bereiche **Meine Inhalte**, **Übung erstellen** und **Probeklausur erstellen** führen ohne zusätzlichen Moduswechsel zu den gespeicherten Artefakten beziehungsweise Erstellungsformularen. Optional begrenzt ein Kursfilter die Suche. Der Chat ruft passende Notes über dasselbe semantische Retrieval wie die Wissensbasis-Suche ab, gibt dem Modell nur diese Inhalte und zeigt an jeder Antwort die tatsächlich verwendeten PDF-Dateien und Seiten. Eine Antwort ohne belegte Quelle wird nicht als wissensbasierte Antwort ausgegeben. Wenn die Wissensbasis nicht genügend Inhalt liefert, meldet der Chat das offen.
 
 Kurze Anschlussfragen berücksichtigen höchstens die sechs letzten Nachrichten als Gesprächskontext. Dieser Kontext hilft bei der Auflösung von Bezügen; die Antwort muss weiterhin durch neu abgerufene Notes gedeckt sein. Frage, Antwort, Kursfilter und Quellen werden gemeinsam in SQLite gespeichert. Alte Chats können deshalb nach einem Neustart ohne LLM- oder Embedding-Aufruf gelesen werden.
 
 ## Übungen, Probeklausuren und Critic Agent
 
-Unter **Lernen** stehen neben dem Lernchat drei Bereiche zur Verfügung: **Übungen erstellen**, **Probeklausur erstellen** und **Meine Inhalte**. Eine Generierung beginnt ausschließlich über den jeweiligen Formular-Button.
+Erstellte mathematische Formeln werden als LaTeX mit Inline- oder abgesetzten Delimitern ausgegeben und durch Streamlit gerendert. Vorhandene Chatantworten mit `\(...\)`, `\[...\]` oder einer alleinstehenden eckigen Formelschreibweise werden bei der Anzeige für Streamlit konvertiert.
 
 Der Ablauf ist bewusst klein und nachvollziehbar:
 
@@ -118,7 +118,7 @@ Technische Quellen: [OpenAI Embeddings](https://developers.openai.com/api/docs/g
 
 PDFs, Markdown-Notes, SQLite-Daten, Chroma-Vektoren und API-Konfiguration liegen lokal in den Ordnern `user_data/`, `knowledge_base/`, `chroma_db/`, `data/` beziehungsweise in `.env`. Diese Pfade und Python-Umgebungen sind in `.gitignore` ausgeschlossen. API-Keys werden nicht in SQLite oder in generierten Inhalten gespeichert.
 
-Das Projekt arbeitet nicht vollständig offline: Für Extraktion, Embeddings, Lernchat, Übungen und Klausuren werden die jeweils nötigen Inhalte an den gewählten Anbieter OpenAI oder Google Gemini übertragen. Welche Daten dabei verarbeitet werden, richtet sich zusätzlich nach den Bedingungen und Einstellungen des Anbieters. Vor einer Weitergabe des Projekts sollten `.env` und alle lokalen Datenordner privat bleiben.
+Das Projekt arbeitet nicht vollständig offline: Für Extraktion, Embeddings, Lernchat, Übungen und Klausuren werden die jeweils nötigen Inhalte an den gewählten Anbieter OpenAI oder Google Gemini übertragen. Bei jeder Knowledge Extraction werden neben dem Text auch gerenderte Bilder aller PDF-Seiten übertragen, einschließlich Seiten ohne Textlayer. Das kann den Tokenverbrauch und die Verarbeitungsdauer deutlich erhöhen. Welche Daten dabei verarbeitet werden, richtet sich zusätzlich nach den Bedingungen und Einstellungen des Anbieters. Vor einer Weitergabe des Projekts sollten `.env` und alle lokalen Datenordner privat bleiben.
 
 ## Warum nicht einfach ein PDF in ChatGPT laden?
 
@@ -126,7 +126,8 @@ Der Companion verwaltet mehrere Unterlagen dauerhaft als eigene, lokal nachvollz
 
 ## Bekannte Grenzen
 
-- Gescannte PDFs benötigen OCR; diese Funktion ist nicht enthalten.
+- Bilder, Diagramme und Handschrift werden durch das multimodale Modell gemeinsam mit dem extrahierten PDF-Text ausgewertet. Unleserliche oder sehr kleine Inhalte können trotzdem übersehen oder falsch erkannt werden; handschriftliche Erkennung ist nicht garantiert.
+- Da jede Seite als Bild mitgesendet wird, kann die Dokumentverarbeitung mehr Bildtokens und längere Laufzeiten verursachen als reine Textextraktion. Es gibt keinen zusätzlichen Vision-Agent-Aufruf: Bildanalyse ist Teil derselben Knowledge-Extraction-Anfrage pro Abschnitt.
 - Antworten und generierte Aufgaben können trotz Quellenbindung fachliche Fehler enthalten. Quellen sollten bei wichtigen Aussagen geprüft werden.
 - Die Seitennummer bezeichnet die physische PDF-Seite und kann von einer aufgedruckten Nummer abweichen.
 - Knowledge Extraction, Embeddings und Modellantworten können API-Kosten verursachen.
@@ -179,7 +180,7 @@ Der Lauf verursacht je Frage genau einen Retrieval- und einen LLM-Aufruf. Vorhan
 
 Die Sidebar zeigt Navigation vor einer separat scrollbar gehaltenen Chatliste. **Chat hinzufügen** startet einen persistenten Chat. Pins überleben Neustarts; angepinnte Chats stehen zuerst, danach folgt die letzte Aktivität. Eine bestätigte Chat-Löschung entfernt zugehörige Nachrichten; unabhängige Lernartefakte, Notes und PDFs bleiben erhalten. Alte chatbezogene Klausuren verlieren nur ihre Chatzuordnung.
 
-Lernmodus und Kurs liegen im nativen `st.bottom`-Bereich direkt oberhalb des Chat-Inputs und bleiben bei langen Chats erreichbar. **Meine Inhalte** nutzt denselben Kursfilter mit **Alle Kurse** als Standard. Das Löschen eines einzelnen Artefakts erfordert eine Bestätigung. Die Quellenanzeige zeigt weiterhin Original-PDF-Seiten; interne RAG-Kontextblöcke werden nicht angezeigt.
+Die Kursauswahl liegt im nativen `st.bottom`-Bereich. Chat, **Meine Inhalte**, **Übung erstellen** und **Probeklausur erstellen** sind eigene Sidebar-Navigationen. **Meine Inhalte** nutzt denselben Kursfilter mit **Alle Kurse** als Standard. Das Löschen eines einzelnen Artefakts erfordert eine Bestätigung. Die Quellenanzeige zeigt weiterhin Original-PDF-Seiten; interne RAG-Kontextblöcke werden nicht angezeigt.
 
 Neue Notes besitzen maximal fünf Tags mit jeweils höchstens drei Wörtern. Lokale Normalisierung vereinheitlicht Unicode, Groß-/Kleinschreibung und Trennzeichen, entfernt lange Tags und Duplikate und verwendet eindeutige vorhandene Tags desselben Kurses wieder. Die Tagliste wird nicht zusätzlich an das LLM geschickt. Alte Notes werden nicht rückwirkend bereinigt und es gibt keinen separaten Tag-LLM-Aufruf.
 
@@ -189,7 +190,7 @@ Vor der Pin-Migration und vor jeder Kursumbenennung entsteht eine mit der SQLite
 
 Der Verbindungsstatus nutzt [OpenAI Modellmetadaten](https://developers.openai.com/api/reference/resources/models/methods/retrieve) beziehungsweise [Gemini Modellmetadaten](https://ai.google.dev/api/models). Eine erfolgreiche Abfrage bestätigt Erreichbarkeit und Modellzugriff, aber nicht verfügbares Guthaben oder jede Generierungsfunktion. Fehler werden ohne rohe Providerantworten angezeigt. Es findet keine generative Testanfrage statt.
 
-PDFs werden weiterhin ausschließlich als PyMuPDF-Text verarbeitet. OCR, Vision und Diagrammanalyse sind mögliche spätere Erweiterungen und in dieser Version nicht implementiert. Die Drei-Layer-Architektur bleibt erhalten.
+PDF-Text wird weiterhin lokal mit PyMuPDF extrahiert. Zusätzlich rendert PyMuPDF jede Seite als PNG; das konfigurierte OpenAI- oder Gemini-Modell analysiert diese Bilder zusammen mit dem Text innerhalb der bestehenden Knowledge Extraction. Dadurch werden auch Scans ohne Textlayer, Diagramme und Handschrift berücksichtigt, ohne einen neuen Agenten oder eine separate Anfrage pro Seite einzuführen. Die Drei-Layer-Architektur bleibt erhalten.
 
 
 Übungen können ohne **Thema oder Beschreibung** erstellt werden. Dann verwendet das

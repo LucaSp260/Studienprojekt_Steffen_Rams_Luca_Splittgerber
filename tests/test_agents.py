@@ -383,7 +383,7 @@ class AgentUiTests(unittest.TestCase):
         with patch("src.ui.learning.create_exercises") as exercise, \
                 patch("src.ui.learning.create_exam") as exam:
             app = AppTest.from_file(str(ROOT / "app.py")).run(timeout=30)
-            app.selectbox[0].set_value("Meine Inhalte").run()
+            app.radio(key="navigation").set_value("Meine Inhalte").run()
             app.button(key=f"open_exercise_{old_id}").click().run()
             self.assertEqual(len(app.exception), 0)
             labels = [item.label for item in app.expander]
@@ -399,7 +399,7 @@ class AgentUiTests(unittest.TestCase):
             self.assertTrue(any("Breite Regel für mehrere Projekte" in item.value for item in app.markdown))
             exercise.assert_not_called()
             exam.assert_not_called()
-            app.selectbox[0].set_value("Meine Inhalte").run()
+            app.radio(key="navigation").set_value("Meine Inhalte").run()
             self.assertEqual(len(app.exception), 0)
             exercise.assert_not_called()
             exam.assert_not_called()

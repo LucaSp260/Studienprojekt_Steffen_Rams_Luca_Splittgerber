@@ -10,14 +10,22 @@ class OpenAIProvider(BaseProvider):
     def __init__(self, config):
         self.config = config
 
-    def generate(self, prompt, response_model):
+    def generate(self, prompt, response_model, images=None):
         self.last_usage = None
         try:
             with openai.OpenAI(api_key=self.config.api_key, timeout=90, max_retries=0) as client:
+                request_input = prompt
+                if images:
+                    import base64
+                    parts = [{"type": "input_text", "text": prompt}]
+                    parts.extend({"type": "input_image",
+                                  "image_url": "data:image/png;base64," + base64.b64encode(image).decode("ascii"),
+                                  "detail": "high"} for image in images)
+                    request_input = [{"role": "user", "content": parts}]
                 response = client.responses.parse(
                     model=self.config.model,
                     instructions=SYSTEM_INSTRUCTION,
-                    input=prompt,
+                    input=request_input,
                     text_format=response_model,
                     max_output_tokens=12000,
                     store=False,

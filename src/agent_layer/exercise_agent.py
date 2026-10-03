@@ -5,7 +5,7 @@ import sqlite3
 from pydantic import ValidationError
 
 from src.agent_layer.common import (
-    build_sources, difficulty_plan, notify, parse_model, sources_for_prompt,
+    MATH_FORMAT_RULES, build_sources, difficulty_plan, notify, parse_model, sources_for_prompt,
     validate_number_and_difficulty, validate_solution_layers, validate_source_ids,
 )
 from src.agent_layer.critic_agent import review_exercises
@@ -38,7 +38,8 @@ def create_exercises(request, *, retriever=retrieve, llm_service=None, critic=re
         "Verwende für fachliche Aussagen ausschließlich die bereitgestellten Knowledge Notes. "
         "Jede Aufgabe muss mindestens eine passende SOURCE_n-ID verwenden. Erfinde keine Quellen. "
         "Bei Multiple Choice: mindestens drei plausible Optionen; die Lösung nennt eindeutig die richtige Option. "
-        "Formuliere Aufgaben kurz und klar. Nutze subtasks für echte Teilfragen und Listen statt Fließtext. "
+        + MATH_FORMAT_RULES
+        + "Formuliere Aufgaben kurz und klar. Nutze subtasks für echte Teilfragen und Listen statt Fließtext. "
         "Jede Teilaufgabe erhält eine ID ohne Satzzeichen, zum Beispiel a, b, c oder 1, 2, 3. "
         "Übernimm exakt dieselben IDs und dieselbe Reihenfolge in short_answer_items und explanation_items. "
         "Ändere a/b/c niemals in 1/2/3 oder umgekehrt. Bei Teilaufgaben bleiben solution und explanation leer. "

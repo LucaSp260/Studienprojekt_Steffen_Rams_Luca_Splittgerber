@@ -5,7 +5,7 @@ import re
 
 from pydantic import Field, model_validator
 
-from src.agent_layer.common import build_sources, parse_model, sources_for_prompt
+from src.agent_layer.common import MATH_FORMAT_RULES, build_sources, parse_model, sources_for_prompt
 from src.agent_layer.models import AgentError, NonEmpty, StrictModel
 from src.knowledge_layer.retrieval_service import retrieve
 from src.llm.llm_service import LLMService
@@ -44,7 +44,7 @@ def answer_question(question, course=None, history=None, *, retriever=retrieve, 
         "auf Basis der bereitgestellten Knowledge Notes. Ergänze kein allgemeines Modellwissen. Wenn die Notes "
         "nicht ausreichen, setze insufficient_information auf true und sage transparent, dass die vorhandenen "
         "Unterlagen nicht genügend Informationen enthalten. Antworte zuerst direkt, auf verständlichem Deutsch, "
-        "mit kurzen Absätzen und bei Bedarf Listen. Vermeide lange Essays und Wiederholungen. Referenziere nur "
+        "mit kurzen Absätzen und bei Bedarf Listen. " + MATH_FORMAT_RULES + "Vermeide lange Essays und Wiederholungen. Referenziere nur "
         "angebotene SOURCE_n-IDs; erfinde keine Dateinamen oder Seiten.\n"
         f"Ausgewählter Kurs: {course or 'Alle Kurse'}\n"
         f"Begrenzter Gesprächskontext: {json.dumps(history, ensure_ascii=False)}\n"

@@ -9,6 +9,15 @@ from pydantic import ValidationError
 from src.agent_layer.models import AgentError, SourceCitation
 
 
+MATH_FORMAT_RULES = (
+    "Mathematische Formeln müssen als korrektes LaTeX ausgegeben werden, damit sie lesbar gerendert werden: "
+    "inline ausschließlich mit $...$, abgesetzt mit $$ auf eigenen Zeilen. "
+    "Verwende keine eckigen Klammern als Formeldelimiter, keine LaTeX-Formeln in Codeblöcken und keine "
+    "ASCII-Umschreibungen wie x^2, wenn eine echte Formel möglich ist. "
+    "Nutze verständliche Variablendefinitionen im umgebenden Text. "
+)
+
+
 @dataclass(frozen=True)
 class SourceMaterial:
     citation: SourceCitation

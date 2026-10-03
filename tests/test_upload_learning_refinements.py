@@ -107,11 +107,11 @@ def test_history_headings_and_optional_topic_form(upload_environment):
     exercise = save_artifact("exercise", "Testaufgaben", "SWA", {}, {"title": "Testaufgaben", "course": "SWA", "exercises": []})
     with patch("src.ui.learning.create_exercises", return_value={"artifact_id": None}) as generate:
         app = AppTest.from_file(str(ROOT / "app.py")).run(timeout=30)
-        app.selectbox(key="learning_mode").set_value("Meine Inhalte").run()
+        app.radio(key="navigation").set_value("Meine Inhalte").run()
         assert [item.value for item in app.main.get("subheader")] == ["Übungsklausuren", "Übungsaufgaben"]
         assert app.button(key=f"open_exam_{exam}").label.startswith("Testklausur")
         assert app.button(key=f"open_exercise_{exercise}").label.startswith("Testaufgaben")
-        app.selectbox(key="learning_mode").set_value("Übungen erstellen").run()
+        app.radio(key="navigation").set_value("Übung erstellen").run()
         app.selectbox(key="learning_course").set_value("SWA").run()
         assert app.text_input[0].label == "Thema oder Beschreibung (optional)"
         app.button(key="FormSubmitter:exercise_agent-Übungen erstellen").click().run()

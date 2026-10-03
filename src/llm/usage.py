@@ -20,8 +20,10 @@ def usage_operation(operation, document_id=None, note_ids=None):
         _context.reset(token)
 
 
-def generate_recorded(service, prompt, response_model, operation, document_id=None, note_ids=None):
+def generate_recorded(service, prompt, response_model, operation, document_id=None, note_ids=None, images=None):
     with usage_operation(operation, document_id, note_ids):
+        if images:
+            return service.generate(prompt, response_model, images=images)
         return service.generate(prompt, response_model)
 
 

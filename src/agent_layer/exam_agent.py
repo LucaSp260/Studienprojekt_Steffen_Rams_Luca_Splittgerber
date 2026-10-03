@@ -5,7 +5,7 @@ import sqlite3
 from pydantic import ValidationError
 
 from src.agent_layer.common import (
-    apply_time_estimates, build_sources, difficulty_plan, notify, parse_model,
+    MATH_FORMAT_RULES, apply_time_estimates, build_sources, difficulty_plan, notify, parse_model,
     sources_for_prompt, time_target_range, validate_number_and_difficulty,
     validate_solution_layers, validate_source_ids,
 )
@@ -44,7 +44,8 @@ def create_exam(request, *, retriever=retrieve, llm_service=None, critic=review_
         "Jede Aufgabe muss mindestens eine passende SOURCE_n-ID verwenden. Erfinde keine Quellen. "
         "Decke mehrere der tatsächlich vorhandenen Notes ab und vermeide redundante Aufgaben. "
         "Vergib positive ganzzahlige Punkte und rechne total_points exakt aus. "
-        "Formuliere kurze, klare Aufgabenstellungen. Nutze subtasks für Teilfragen und Listen statt Fließtext. "
+        + MATH_FORMAT_RULES
+        + "Formuliere kurze, klare Aufgabenstellungen. Nutze subtasks für Teilfragen und Listen statt Fließtext. "
         "Jede Teilaufgabe erhält eine ID ohne Satzzeichen, zum Beispiel a, b, c oder 1, 2, 3. "
         "Übernimm exakt dieselben IDs und dieselbe Reihenfolge in short_answer_items und explanation_items; "
         "ändere a/b/c niemals in 1/2/3 oder umgekehrt. Bei Teilaufgaben bleiben solution und explanation leer. "

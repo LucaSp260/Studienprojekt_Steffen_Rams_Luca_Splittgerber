@@ -63,3 +63,8 @@ def render_pdf_page(source, page_number, dpi=120):
             return pixmap.tobytes("png")
     except (OSError, RuntimeError, pymupdf.FileDataError) as error:
         raise ValueError("Die PDF-Seite konnte nicht gerendert werden.") from error
+
+
+def render_pdf_pages(source, page_numbers, dpi=144):
+    """Rendert ausgewählte PDF-Seiten für die vollständige visuelle Analyse."""
+    return {number: render_pdf_page(source, number, dpi=dpi) for number in page_numbers}

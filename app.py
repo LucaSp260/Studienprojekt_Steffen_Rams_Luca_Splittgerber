@@ -10,13 +10,19 @@ from src.ui.brain import show_brain_page
 from src.ui.learning import show_learning_page
 from src.ui.page_heading import page_heading, protect_browser_translation
 
-NAVIGATION = ["Lernen", "Unterlagen", "Generierte Notes", "Wissensatlas", "Einstellungen"]
+NAVIGATION = ["Lernen", "Meine Inhalte", "Übung erstellen", "Probeklausur erstellen",
+              "Unterlagen", "Generierte Notes", "Wissensatlas", "Einstellungen"]
+LEARNING_MODES = {
+    "Lernen": "Lernchat",
+    "Meine Inhalte": "Meine Inhalte",
+    "Übung erstellen": "Übungen erstellen",
+    "Probeklausur erstellen": "Probeklausur erstellen",
+}
 st.set_page_config(page_title="AI Learning Companion", page_icon="📚")
 
 def activate_chat(chat_id):
     st.session_state.chat_id = chat_id
     st.session_state.navigation = "Lernen"
-    st.session_state.learning_mode = "Lernchat"
 
 
 def add_new_chat():
@@ -79,7 +85,7 @@ def main():
         if page in pages:
             pages[page]()
         else:
-            show_learning_page(st.session_state.chat_id)
+            show_learning_page(st.session_state.chat_id, LEARNING_MODES[page])
 
 try:
     main()

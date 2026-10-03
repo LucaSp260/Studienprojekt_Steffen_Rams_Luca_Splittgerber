@@ -103,9 +103,20 @@ class KnowledgeTests(unittest.TestCase):
         chunks = build_chunks(pages, max_chars=20, max_pages=2)
         self.assertTrue(all(sum(len(text) for _, text in chunk) <= 20 for chunk in chunks))
         self.assertEqual(''.join(text for chunk in chunks for _, text in chunk), ''.join(pages))
-        self.assertEqual({number for chunk in chunks for number, _ in chunk}, {1, 3, 4})
+        self.assertEqual({number for chunk in chunks for number, _ in chunk}, {1, 2, 3, 4})
         chunks = build_chunks(['x'] * 20)
         self.assertTrue(all(len(chunk) <= 6 for chunk in chunks))
+        self.assertEqual(build_chunks(['', 'Scantext'])[:1], [[(1, ''), (2, 'Scantext')]])
+
+    def test_scanned_pages_are_sent_as_images_with_extraction(self):
+        document = {'id': 5, 'course': 'Datenbanken', 'filename': 'scan.pdf'}
+        self.service.generate.return_value = {'notes': [note_data(pages=[1])]}
+        with patch('src.knowledge_layer.knowledge_extractor.render_pdf_pages',
+                   return_value={1: b'png-page-bytes'}) as render:
+            extract_knowledge([''], document, self.service, pdf_source='scan.pdf')
+        render.assert_called_once_with('scan.pdf', [1])
+        self.assertEqual(self.service.generate.call_args.kwargs['images'], [b'png-page-bytes'])
+        self.assertIn('handschriftliche Notizen', self.service.generate.call_args.args[0])
 
     def test_multiple_notes_registration_and_status(self):
         result = manager.process_document(self.document_id, self.service)
@@ -138,7 +149,9 @@ class KnowledgeTests(unittest.TestCase):
         self.assertEqual(notes[0].source_pages, [1, 7])
         self.assertIn('Primärschlüssel', self.service.generate.call_args.args[0])
         self.service.generate.side_effect = [{'notes': [note_data()]}, LLMError('Netzwerkfehler')]
-        with patch.object(manager, 'read_pdf', return_value={'pages': pages, 'text': 'Erklärung'}):
+        with patch.object(manager, 'read_pdf', return_value={'pages': pages, 'text': 'Erklärung'}), \
+             patch('src.knowledge_layer.knowledge_extractor.render_pdf_pages',
+                   side_effect=lambda _source, numbers: {number: b'image' for number in numbers}):
             with self.assertRaises(LLMError):
                 manager.process_document(self.document_id, self.service)
         self.assert_unprocessed()
@@ -180,9 +193,12 @@ class KnowledgeTests(unittest.TestCase):
     def test_missing_key_no_text_and_processing_lock(self):
         with self.assertRaises(LLMError):
             manager.process_document(self.document_id)
-        with patch.object(manager, 'read_pdf', return_value={'text': '', 'pages': ['']}):
-            with self.assertRaises(ValueError):
-                manager.process_document(self.document_id, self.service)
+        with patch.object(manager, 'read_pdf', return_value={'text': '', 'pages': ['']}), \
+             patch('src.knowledge_layer.knowledge_extractor.render_pdf_pages',
+                   return_value={1: b'page-image'}):
+            result = manager.process_document(self.document_id, self.service)
+            self.assertEqual(result['status'], 'success')
+        self.service.generate.reset_mock()
         manager._processing_lock.acquire()
         try:
             with self.assertRaises(ValueError):
@@ -190,7 +206,8 @@ class KnowledgeTests(unittest.TestCase):
         finally:
             manager._processing_lock.release()
         self.service.generate.assert_not_called()
-        self.assert_unprocessed()
+        self.assertTrue(load_documents()[0]['processed'])
+        self.assertEqual(len(load_notes(document_id=self.document_id)), 2)
 
     def test_restart_in_new_process(self):
         manager.process_document(self.document_id, self.service)
@@ -273,11 +290,19 @@ class KnowledgeTests(unittest.TestCase):
             self.assertTrue(OpenAIProvider(settings).generate('ping', ConnectionResult).ok)
             self.assertFalse(client.responses.parse.call_args.kwargs['store'])
             self.assertEqual(factory.call_args.kwargs['max_retries'], 0)
+            OpenAIProvider(settings).generate('vision prompt', ConnectionResult, images=[b'png-bytes'])
+            request = client.responses.parse.call_args.kwargs['input']
+            self.assertEqual(request[0]['content'][0]['text'], 'vision prompt')
+            self.assertTrue(request[0]['content'][1]['image_url'].startswith('data:image/png;base64,'))
         with patch('src.llm.gemini_provider.genai.Client') as factory:
             client = factory.return_value.__enter__.return_value
             client.interactions.create.return_value = SimpleNamespace(status='completed', output_text='{"ok":true}')
             self.assertTrue(GeminiProvider(settings).generate('ping', ConnectionResult).ok)
             self.assertEqual(client.interactions.create.call_args.kwargs['response_format']['mime_type'], 'application/json')
+            GeminiProvider(settings).generate('vision prompt', ConnectionResult, images=[b'png-bytes'])
+            request = client.interactions.create.call_args.kwargs['input']
+            self.assertEqual(request[0], {'type': 'text', 'text': 'vision prompt'})
+            self.assertEqual(request[1]['mime_type'], 'image/png')
             client.interactions.create.return_value.output_text = 'invalid'
             with self.assertRaises(LLMError):
                 GeminiProvider(settings).generate('ping', ConnectionResult)

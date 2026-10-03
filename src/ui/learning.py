@@ -1,5 +1,6 @@
 """Lernseite für Chat, explizite Agent-Läufe und gespeicherte Artefakte."""
 
+import re
 import sqlite3
 from contextlib import closing
 from pathlib import Path
@@ -23,15 +24,14 @@ DIFFICULTIES = ["leicht", "mittel", "schwer", "gemischt"]
 EXERCISE_TYPES = ["Offene Frage", "Verständnisfrage", "Anwendungsaufgabe", "Multiple Choice", "Gemischt"]
 
 
-def show_learning_page(chat_id):
+def show_learning_page(chat_id, mode="Lernchat"):
     st.html("""<style>
     [data-testid="stBottom"] [data-testid="stHorizontalBlock"] {flex-wrap: nowrap;}
     [data-testid="stBottom"] [data-testid="stColumn"] {min-width: 0 !important; flex: 1 1 0 !important;}
     </style>""")
     # Native fixed bottom region reserves its own space above the chat input.
     with st.bottom:
-        mode_col, course_col = st.columns(2)
-        mode = mode_col.selectbox("Lernmodus", ["Lernchat", "Übungen erstellen", "Probeklausur erstellen", "Meine Inhalte"], key="learning_mode")
+        course_col = st.container()
         courses = _courses()
         selected = course_col.selectbox("Kurs", [None] + courses, key="learning_course",
             format_func=lambda value: "Alle Kurse" if value is None else value)
@@ -49,7 +49,7 @@ def _show_chat(chat_id, selected):
     messages = load_messages(chat_id)
     for message in messages:
         with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+            st.markdown(_render_math_markdown(message["content"]))
             metadata = message_metadata(message)
             _render_chat_sources(metadata.get("sources", []))
     if content := st.chat_input("Frage an deine Notes"):
@@ -124,8 +124,46 @@ def _courses():
     return list_courses()
 
 
+def _render_math_markdown(text):
+    """Streamlit-Markdown rendert $-Delimiters; normalisiere gängiges LaTeX."""
+    code_pattern = re.compile(r"(```.*?```|~~~.*?~~~)", re.DOTALL)
+    parts = code_pattern.split(text)
+    for index, part in enumerate(parts):
+        if code_pattern.fullmatch(part):
+            continue
+        part = re.sub(r"\\+\[\s*(.*?)\s*\\+\]",
+                      lambda match: f"\n$$\n{match.group(1)}\n$$\n", part, flags=re.DOTALL)
+        part = re.sub(r"\\+\(\s*(.*?)\s*\\+\)",
+                      lambda match: f"${match.group(1)}$", part, flags=re.DOTALL)
+        part = re.sub(r"(?m)^\s*\[\s*([^\]\n]+?)\s*\]\s*$",
+                      _convert_legacy_bracket_formula, part)
+        part = re.sub(r"\[\s*([^\]\n]+?)\s*\](?!\()",
+                      _convert_legacy_inline_formula, part)
+        parts[index] = part
+    return "".join(parts)
+
+
+def _convert_legacy_bracket_formula(match):
+    expression = match.group(1)
+    if _looks_like_formula(expression):
+        return f"\n$$\n{expression}\n$$\n"
+    return match.group(0)
+
+
+def _convert_legacy_inline_formula(match):
+    expression = match.group(1)
+    if _looks_like_formula(expression):
+        return f"${expression}$"
+    return match.group(0)
+
+
+def _looks_like_formula(expression):
+    return not re.fullmatch(r"SOURCE_\d+", expression.strip()) and bool(
+        re.search(r"\\[A-Za-z]+|[_^]\{?", expression)
+    )
+
+
 def _show_exercise_form(course=None):
-    st.subheader("Übungen erstellen")
     courses = _courses()
     if not courses:
         st.info("Noch keine Knowledge Notes vorhanden. Verarbeite und indexiere zuerst Unterlagen.")
@@ -157,7 +195,6 @@ def _show_exercise_form(course=None):
 
 
 def _show_exam_form(course=None):
-    st.subheader("Probeklausur erstellen")
     courses = _courses()
     if not courses:
         st.info("Noch keine Knowledge Notes vorhanden. Verarbeite und indexiere zuerst Unterlagen.")
@@ -284,38 +321,38 @@ def _render_artifact(row):
         if row["artifact_type"] == "exam":
             details += f" · {item['points']} Punkte"
         st.caption(details)
-        st.write(item["task"])
+        st.markdown(_render_math_markdown(item["task"]))
         for index, subtask in enumerate(item.get("subtasks", [])):
             if isinstance(subtask, dict):
                 label, text = subtask.get("id", str(index + 1)), subtask.get("text", "")
             else:
                 label, text = (chr(ord("a") + index) if index < 26 else str(index + 1)), subtask
-            st.markdown(f"**{label})** {text}")
+            st.markdown(_render_math_markdown(f"**{label})** {text}"))
         if item.get("choices"):
             for choice in item["choices"]:
-                st.write(f"- {choice}")
+                st.markdown(_render_math_markdown(f"- {choice}"))
         _render_sources(item["source_ids"], sources)
         with st.expander(f"Kurzlösung zu Aufgabe {item['number']} anzeigen"):
             answer_items = item.get("short_answer_items", [])
             if answer_items:
                 for answer in answer_items:
-                    st.markdown(f"**{answer['id']})** {answer['answer']}")
+                    st.markdown(_render_math_markdown(f"**{answer['id']})** {answer['answer']}"))
             else:
                 short_solution = item.get("short_solution") or item.get(
                     "solution", "Keine Lösung gespeichert."
                 )
-                st.write(short_solution)
+                st.markdown(_render_math_markdown(short_solution))
         with st.expander(f"Erklärung zu Aufgabe {item['number']} anzeigen"):
             explanation_items = item.get("explanation_items", [])
             if explanation_items:
                 for explanation in explanation_items:
                     st.markdown(f"**{explanation['id']})**")
-                    st.write(explanation["explanation"])
+                    st.markdown(_render_math_markdown(explanation["explanation"]))
             else:
                 explanation = item.get("explanation") or item.get(
                     "solution", "Keine Erklärung gespeichert."
                 )
-                st.write(explanation)
+                st.markdown(_render_math_markdown(explanation))
 
 
 def _render_sources(source_ids, sources):
