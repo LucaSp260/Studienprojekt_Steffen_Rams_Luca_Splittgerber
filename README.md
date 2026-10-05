@@ -17,13 +17,15 @@ flowchart LR
 - **Knowledge Base Layer** (`src/knowledge_layer`, `knowledge_base`): Inhalte thematisch extrahieren und als Markdown-Notes mit YAML-Metadaten speichern und semantisch durchsuchen.
 - **Agentic Reasoning / Analytics Layer** (`src/agent_layer`): Lernchat, Exercise, Exam, Critic und Connection Agent greifen über Retrieval beziehungsweise belegte Notes und `LLMService` auf Wissen und Modelle zu.
 
-SQLite (`src/persistence`) speichert Chats, Dokumente, Notes-Übersicht sowie den bestätigten Second-Brain-Graph und die Review-Historie. `src/llm` kapselt beide Anbieter hinter `LLMService`. Markdown bleibt die Wissensrepräsentation der Notes; der kuratierte Graph wird zusätzlich als Obsidian-kompatible Markdown-Dateien exportiert.
+SQLite (`src/persistence`) speichert Chats, Dokumente, Notes-Übersicht sowie den Second-Brain-Graph mit KI-generierten und nutzerbestätigten Beziehungen und die Review-Historie. `src/llm` kapselt beide Anbieter hinter `LLMService`. Markdown bleibt die Wissensrepräsentation der Notes; der kuratierte Graph wird zusätzlich als Obsidian-kompatible Markdown-Dateien exportiert.
 
 ## Voraussetzungen, Installation und Start
 
-Benötigt werden Windows, Python 3.10 oder neuer mit pip (empfohlen: Python 3.12) und ein API-Key für OpenAI oder Google Gemini. Das Repository über GitHub herunterladen oder mit `git clone --branch Neuste_Version_01_10 https://github.com/LucaSp260/Studienprojekt_Steffen_Luca.git` klonen. Anschließend unter Windows zuerst `setup.bat`, danach `start.bat` doppelt anklicken. Das Setup prüft Python, erstellt `.venv`, installiert alle Abhängigkeiten und initialisiert die lokalen Ordner sowie SQLite. Bereits eingerichtete Umgebungen lassen sich durch erneutes Ausführen von `setup.bat` aktualisieren. Falls der Browser nicht öffnet: http://localhost:8501. Zum Beenden im Terminal Strg+C drücken.
+Benötigt werden Windows, Python 3.10 oder neuer mit pip (empfohlen: Python 3.12) und ein API-Key für OpenAI oder Google Gemini. Das Repository über GitHub herunterladen oder mit `git clone --branch Main https://github.com/LucaSp260/Studienprojekt_Steffen_Rams_Luca_Splittgerber.git` klonen. Anschließend unter Windows zuerst `setup.bat`, danach `start.bat` doppelt anklicken. Das Setup prüft Python, erstellt `.venv`, installiert alle Abhängigkeiten und initialisiert die lokalen Ordner sowie SQLite. Bereits eingerichtete Umgebungen lassen sich durch erneutes Ausführen von `setup.bat` aktualisieren. Falls der Browser nicht öffnet: http://localhost:8501. Zum Beenden im Terminal Strg+C drücken.
 
-Ein eigener Python-Pfad kann mit `setup.bat "C:\Pfad\zu\python.exe"` gewählt werden. Die vorhandene `.venv` verwendet Python 3.12 aus der lokalen Codex-Runtime; nach deren Entfernung die Umgebung mit einer eigenen Python-Installation neu einrichten.
+Ein eigener Python-Pfad kann mit `setup.bat "C:\Pfad\zu\python.exe"` gewählt werden. Die virtuelle Umgebung `.venv` wird durch `setup.bat` auf dem jeweiligen Rechner neu angelegt und ist nicht Teil des Downloads.
+
+Der GitHub-Download enthält den Programmcode, aber keine API-Schlüssel, persönlichen PDFs, gespeicherten Chats oder fertige Wissensbasis. Nach dem ersten Start werden ein eigener API-Schlüssel eingerichtet und eigene PDF-Unterlagen hinzugefügt.
 
 ## Ein PDF in die Wissensbasis übernehmen
 
@@ -34,7 +36,7 @@ Ein eigener Python-Pfad kann mit `setup.bat "C:\Pfad\zu\python.exe"` gewählt we
 
 **Meine Unterlagen** zeigt PDFs nach Kurs gruppiert. Über **PDF löschen** und die anschließende Bestätigung werden das PDF, seine Knowledge Notes und deren Chroma-Einträge entfernt. Im Wissensatlas bleiben gemeinsam belegte Konzepte und Beziehungen mit ihren übrigen Belegen erhalten; nicht mehr belegte Elemente verschwinden. Ein vorhandener Obsidian-Export des Kurses wird aktualisiert. Frühere Chats und Lerninhalte bleiben lesbar und kennzeichnen Quellen aus gelöschten PDFs als nicht mehr verfügbar. Das Löschen ruft weder LLM noch Embedding-Provider auf.
 
-Bei der Verarbeitung wird der extrahierte PDF-Text an den gewählten Anbieter gesendet. API-Aufrufe können Kosten verursachen. Generative und Embedding-Aufrufe erfolgen bei ausdrücklich ausgelöster Dokumentverarbeitung, Lernfragen oder Generierung. Nur Einstellungen prüfen zusätzlich Modellmetadaten; Ergebnisse sind für fünf Minuten pro Provider, Modell und Schlüsselidentität gecacht. Das Öffnen alter Chats und Notes löst keine generative Anfrage aus. Bereits verarbeitete PDFs werden nicht erneut verarbeitet; Reprocessing ist nicht enthalten.
+Bei der Verarbeitung werden der extrahierte PDF-Text und gerenderte Bilder der PDF-Seiten an den gewählten Anbieter gesendet. API-Aufrufe können Kosten verursachen. Generative und Embedding-Aufrufe erfolgen bei ausdrücklich ausgelöster Dokumentverarbeitung, Lernfragen oder Generierung. Nur Einstellungen prüfen zusätzlich Modellmetadaten; Ergebnisse sind für fünf Minuten pro Provider, Modell und Schlüsselidentität gecacht. Das Öffnen alter Chats und Notes löst keine generative Anfrage aus. Bereits verarbeitete PDFs werden nicht erneut verarbeitet; Reprocessing ist nicht enthalten.
 
 ## Second Brain und Wissensatlas
 
@@ -74,7 +76,7 @@ Beim Neustart wird der zuletzt aktualisierte Chat samt gespeicherter Antworten u
 
 ## Lernchat
 
-Unter **Lernen** lassen sich Fragen zur persönlichen Wissensbasis stellen. Die direkt erreichbaren Sidebar-Bereiche **Meine Inhalte**, **Übung erstellen** und **Probeklausur erstellen** führen ohne zusätzlichen Moduswechsel zu den gespeicherten Artefakten beziehungsweise Erstellungsformularen. Optional begrenzt ein Kursfilter die Suche. Der Chat ruft passende Notes über dasselbe semantische Retrieval wie die Wissensbasis-Suche ab, gibt dem Modell nur diese Inhalte und zeigt an jeder Antwort die tatsächlich verwendeten PDF-Dateien und Seiten. Eine Antwort ohne belegte Quelle wird nicht als wissensbasierte Antwort ausgegeben. Wenn die Wissensbasis nicht genügend Inhalt liefert, meldet der Chat das offen.
+Unter **Chat** lassen sich Fragen zur persönlichen Wissensbasis stellen. Die direkt erreichbaren Sidebar-Bereiche **Meine Inhalte**, **Übung erstellen** und **Probeklausur erstellen** führen ohne zusätzlichen Moduswechsel zu den gespeicherten Artefakten beziehungsweise Erstellungsformularen. Optional begrenzt ein Kursfilter die Suche. Der Chat ruft passende Notes über dasselbe semantische Retrieval wie die Wissensbasis-Suche ab, gibt dem Modell nur diese Inhalte und zeigt an jeder Antwort die tatsächlich verwendeten PDF-Dateien und Seiten. Eine Antwort ohne belegte Quelle wird nicht als wissensbasierte Antwort ausgegeben. Wenn die Wissensbasis nicht genügend Inhalt liefert, meldet der Chat das offen.
 
 Kurze Anschlussfragen berücksichtigen höchstens die sechs letzten Nachrichten als Gesprächskontext. Dieser Kontext hilft bei der Auflösung von Bezügen; die Antwort muss weiterhin durch neu abgerufene Notes gedeckt sein. Frage, Antwort, Kursfilter und Quellen werden gemeinsam in SQLite gespeichert. Alte Chats können deshalb nach einem Neustart ohne LLM- oder Embedding-Aufruf gelesen werden.
 
@@ -82,10 +84,13 @@ Kurze Anschlussfragen berücksichtigen höchstens die sechs letzten Nachrichten 
 
 Erstellte mathematische Formeln werden als LaTeX mit Inline- oder abgesetzten Delimitern ausgegeben und durch Streamlit gerendert. Vorhandene Chatantworten mit `\(...\)`, `\[...\]` oder einer alleinstehenden eckigen Formelschreibweise werden bei der Anzeige für Streamlit konvertiert.
 
+In **Übung erstellen** und **Probeklausur erstellen** lässt sich **Critic Agent zur Qualitätsprüfung verwenden (zusätzlicher KI-Aufruf)** jeweils ein- oder ausschalten. Standardmäßig ist die Prüfung aktiviert. Ohne Critic entfällt dessen zusätzlicher Modellaufruf; die lokale Struktur- und Quellenvalidierung bleibt erhalten. Diese Inhalte werden als ohne Critic erstellt gekennzeichnet.
+
 Der Ablauf ist bewusst klein und nachvollziehbar:
 
 ```text
-Retrieval → Generator → Critic → gegebenenfalls eine Revision → Final
+Mit Critic:  Retrieval → Generator → Critic (ggf. überarbeitete Fassung) → Final
+Ohne Critic: Retrieval → Generator → lokale Struktur-/Quellenprüfung → Final
 ```
 
 - Der **Exercise Agent** bildet aus Kurs, Thema, Anzahl, Schwierigkeit und Aufgabentyp eine Retrieval-Anfrage. Er verwendet standardmäßig höchstens fünf Notes und erzeugt Aufgaben mit Musterlösung, Erklärung und Quellen.
@@ -96,7 +101,7 @@ Aufgaben besitzen optional strukturierte Teilaufgaben. Jede Teilaufgabe, Kurzant
 
 Vor dem Modellaufruf erhalten Retrieval-Treffer lokale IDs wie `SOURCE_1`. Das Modell darf nur diese IDs verwenden. Python validiert jede ID und übersetzt sie für die Anzeige in den tatsächlichen PDF-Dateinamen und die Seiten der gefundenen Knowledge Note. Ungültige oder erfundene IDs führen zu einem Fehler.
 
-Das ist mehr als ein einzelner LLM-Prompt: Die Inhalte stammen aus der persistenten persönlichen Knowledge Base, werden gezielt semantisch abgerufen, auf diese Quellen begrenzt, strukturiert validiert und anschließend durch einen spezialisierten zweiten Agenten geprüft. Fertige Übungen und Klausuren liegen als JSON in SQLite in `generated_artifacts` und können unter **Meine Inhalte** nach einem Neustart ohne API-Aufruf wieder geöffnet werden.
+Das ist mehr als ein einzelner LLM-Prompt: Die Inhalte stammen aus der persistenten persönlichen Knowledge Base, werden gezielt semantisch abgerufen, auf diese Quellen begrenzt, strukturiert validiert und bei aktiviertem Critic anschließend durch einen spezialisierten zweiten Agenten geprüft. Fertige Übungen und Klausuren liegen als JSON in SQLite in `generated_artifacts` und können unter **Meine Inhalte** nach einem Neustart ohne API-Aufruf wieder geöffnet werden.
 
 ## Semantisches Retrieval und Embeddings
 
@@ -122,7 +127,7 @@ Das Projekt arbeitet nicht vollständig offline: Für Extraktion, Embeddings, Le
 
 ## Warum nicht einfach ein PDF in ChatGPT laden?
 
-Der Companion verwaltet mehrere Unterlagen dauerhaft als eigene, lokal nachvollziehbare Wissensbasis. Er erkennt bereits verarbeitete Dokumente, hält Quellen bis auf PDF-Seitenebene fest, sucht kursübergreifend oder mit Kursfilter und speichert Antworten zusammen mit den konkret verwendeten Quellen. Übungen und Klausuren verwenden dieselbe Wissensbasis, validieren ihre strukturierte Ausgabe und lassen einen getrennten Critic Agent genau eine Qualitätsprüfung durchführen. Dadurch bleibt der Ablauf reproduzierbarer als ein einzelner, isolierter Datei-Chat.
+Der Companion verwaltet mehrere Unterlagen dauerhaft als eigene, lokal nachvollziehbare Wissensbasis. Er erkennt bereits verarbeitete Dokumente, hält Quellen bis auf PDF-Seitenebene fest, sucht kursübergreifend oder mit Kursfilter und speichert Antworten zusammen mit den konkret verwendeten Quellen. Übungen und Klausuren verwenden dieselbe Wissensbasis, validieren ihre strukturierte Ausgabe und können bei aktiviertem Schalter einen getrennten Critic Agent genau eine Qualitätsprüfung durchführen lassen. Dadurch bleibt der Ablauf reproduzierbarer als ein einzelner, isolierter Datei-Chat.
 
 ## Bekannte Grenzen
 
