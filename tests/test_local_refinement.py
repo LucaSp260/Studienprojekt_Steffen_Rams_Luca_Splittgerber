@@ -104,7 +104,7 @@ class LocalDataTests(unittest.TestCase):
         app=AppTest.from_file(str(ROOT/'app.py')).run(timeout=30)
         app.radio(key='navigation').set_value('Meine Inhalte').run()
         app.button(key=f'chat_{self.chat}').click().run()
-        self.assertEqual(app.radio(key='navigation').value,'Lernen')
+        self.assertEqual(app.radio(key='navigation').value,'Chat')
         self.assertEqual(len(app.exception),0)
 
     def test_chat_delete_preserves_independent_contents(self):
@@ -223,8 +223,10 @@ class LocalDataTests(unittest.TestCase):
             self.assertEqual(len(app.exception),0)
             self.assertEqual(app.sidebar.radio[0].label,'Navigation')
             self.assertEqual(app.button(key='add_chat').label,'Chat hinzufügen')
-            self.assertTrue({'Meine Inhalte', 'Übung erstellen', 'Probeklausur erstellen'}
-                            .issubset(set(app.radio(key='navigation').options)))
+            self.assertEqual(app.radio(key='navigation').options,
+                             ['Chat', 'Wissensatlas', 'Übung erstellen', 'Probeklausur erstellen',
+                              'Meine Inhalte', 'Unterlagen', 'Generierte Notes', 'Einstellungen'])
+            self.assertIn('>Chat</h1>', next(item.value for item in app.get('html') if '<h1' in item.value))
             self.assertTrue(any(widget.label=='Kurs' for widget in app.selectbox))
             app.radio(key='navigation').set_value('Generierte Notes').run()
             self.assertIn('>Generierte Notes</h1>', next(item.value for item in app.get('html') if '<h1' in item.value))
@@ -237,6 +239,7 @@ class LocalDataTests(unittest.TestCase):
             app.radio(key='navigation').set_value('Wissensatlas').run()
             self.assertEqual(len(app.exception),0)
             self.assertIn('>Wissensatlas</h1>', next(item.value for item in app.get('html') if '<h1' in item.value))
+            self.assertIn('Beziehungen', [item.value for item in app.subheader])
             self.assertFalse(app.toggle(key='brain_show_edge_labels').value)
             self.assertNotIn('brain_propose',[b.key for b in app.button])
             agent.assert_not_called()
@@ -479,7 +482,7 @@ class LocalDataTests(unittest.TestCase):
             patch.object(document_manager,'USER_DATA_PATH',self.root/'user_data'),
         ):
             app=AppTest.from_file(str(ROOT/'app.py')).run(timeout=30)
-            for page in ('Unterlagen','Wissensatlas','Einstellungen','Generierte Notes','Lernen'):
+            for page in ('Unterlagen','Wissensatlas','Einstellungen','Generierte Notes','Chat'):
                 app.radio(key='navigation').set_value(page).run(timeout=30)
                 headings=[item.value for item in app.get('html') if '<h1' in item.value]
                 self.assertEqual(len(headings),1,(page,headings))

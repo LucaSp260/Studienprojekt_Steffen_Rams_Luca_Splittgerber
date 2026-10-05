@@ -93,6 +93,7 @@ def show_brain_page():
                 st.session_state.pop("last_atlas_click", None)
                 st.rerun()
         if edges:
+            st.subheader("Beziehungen")
             edge_options = {e["id"]: f"{e['source_name']} → {e['target_name']}" for e in edges}
             if st.session_state.get("brain_selected_edge") not in edge_options:
                 st.session_state.brain_selected_edge = next(iter(edge_options))

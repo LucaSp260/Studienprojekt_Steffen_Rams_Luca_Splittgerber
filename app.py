@@ -10,10 +10,10 @@ from src.ui.brain import show_brain_page
 from src.ui.learning import show_learning_page
 from src.ui.page_heading import page_heading, protect_browser_translation
 
-NAVIGATION = ["Lernen", "Meine Inhalte", "Übung erstellen", "Probeklausur erstellen",
-              "Unterlagen", "Generierte Notes", "Wissensatlas", "Einstellungen"]
+NAVIGATION = ["Chat", "Wissensatlas", "Übung erstellen", "Probeklausur erstellen", "Meine Inhalte",
+              "Unterlagen", "Generierte Notes", "Einstellungen"]
 LEARNING_MODES = {
-    "Lernen": "Lernchat",
+    "Chat": "Lernchat",
     "Meine Inhalte": "Meine Inhalte",
     "Übung erstellen": "Übungen erstellen",
     "Probeklausur erstellen": "Probeklausur erstellen",
@@ -22,7 +22,7 @@ st.set_page_config(page_title="AI Learning Companion", page_icon="📚")
 
 def activate_chat(chat_id):
     st.session_state.chat_id = chat_id
-    st.session_state.navigation = "Lernen"
+    st.session_state.navigation = "Chat"
 
 
 def add_new_chat():
@@ -31,6 +31,8 @@ def add_new_chat():
 
 def main():
     protect_browser_translation()
+    if st.session_state.get("navigation") == "Lernen":
+        st.session_state.navigation = "Chat"
     initialize_database()
     chats = list_chats()
     if not chats:
@@ -46,8 +48,10 @@ def main():
         [data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"]:nth-child(3)) > [data-testid="stColumn"] {flex: 0 0 36px !important;}
         [data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"]:nth-child(3)) > [data-testid="stColumn"]:first-child {flex: 1 1 0 !important;}
         [data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"]:nth-child(3)) > [data-testid="stColumn"]:nth-child(n+2) button {padding: 0.25rem !important;}
+        .st-key-sidebar_navigation [role="radiogroup"] > label:nth-of-type(6) {margin-top: 1rem;}
         </style>""")
-        page = st.radio("Navigation", NAVIGATION, key="navigation")
+        with st.container(key="sidebar_navigation"):
+            page = st.radio("Navigation", NAVIGATION, key="navigation")
         st.divider()
         st.subheader("Chats")
         st.button("Chat hinzufügen", use_container_width=True, key="add_chat", on_click=add_new_chat)
